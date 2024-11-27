@@ -4,10 +4,7 @@ TCHAR g_AppDir[MAX_PATH];
 DWORD g_AppDirBuffSize;
 HANDLE g_hFileUsersDB;
 
-int
-createUsersDirectory(
-    VOID
-) 
+int createUsersDirectory(VOID) 
 {
     TCHAR dirPath[MAX_PATH];
     _tcscpy_s(dirPath, MAX_PATH, g_AppDir);
@@ -41,10 +38,7 @@ createUsersDirectory(
 }
 
 
-int
-createUsersDatabase(
-    VOID
-) 
+int createUsersDatabase(VOID) 
 {
     const TCHAR* fileName = _T("users.txt");
 
@@ -76,19 +70,13 @@ createUsersDatabase(
 }
 
 
-void 
-displayExitMSG(
-    VOID
-) 
+void displayExitMSG(VOID) 
 {
     printf("\nPress Enter to exit...");
     getchar();
 }
 
-NTSTATUS WINAPI
-SafeStorageInit(
-    VOID
-)
+NTSTATUS WINAPI SafeStorageInit(VOID)
 {
     // find %APPDIR%
     g_AppDirBuffSize = GetCurrentDirectory(MAX_PATH, g_AppDir);
@@ -116,10 +104,7 @@ SafeStorageInit(
 }
 
 
-VOID WINAPI
-SafeStorageDeinit(
-    VOID
-)
+VOID WINAPI SafeStorageDeinit(VOID)
 {
 
     if (g_hFileUsersDB != INVALID_HANDLE_VALUE) {
@@ -133,19 +118,16 @@ SafeStorageDeinit(
 }
 
 
-int
-usernameExists(
-    const char* username
-) 
+int usernameExists(const char* username)
 {
     g_hFileUsersDB = CreateFile(
-        _T("users.txt"),             
-        GENERIC_READ,                
-        0,                          
-        NULL,                        
-        OPEN_EXISTING,             
-        FILE_ATTRIBUTE_NORMAL,       
-        NULL                        
+        _T("users.txt"),
+        GENERIC_READ,
+        0,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
     );
 
     // Check if users.txt file is open 
@@ -160,10 +142,13 @@ usernameExists(
 
     char buffer[256];
     DWORD bytesRead;
-    char lineBuffer[512] = "";
+    char lineBuffer[512];
+    memset(lineBuffer, 0, 512);
+    lineBuffer[511] = '\0';
     char* lineEnd = NULL;
 
-    while (TRUE) {
+    while (TRUE) 
+    {
         if (!ReadFile(g_hFileUsersDB, buffer, sizeof(buffer) - 1, &bytesRead, NULL)) {
             printf("ReadFile failed: %d\n", GetLastError());
             return FAIL;
@@ -204,7 +189,7 @@ usernameExists(
     return FAIL;
 }
 
-NTSTATUS WINAPI
+NTSTATUS WINAPI 
 SafeStorageHandleRegister(
     const char* Username,
     uint16_t UsernameLength,
@@ -212,15 +197,42 @@ SafeStorageHandleRegister(
     uint16_t PasswordLength
 )
 {
-    printf("%s\n", Username);
+    if (!SanitizedUsername(Username, UsernameLength)) 
+    {
+        printf("%s", "Username should contain only English alphabet letters (a - zA - Z) and be between 5 and 10 characters long\n");
+        return STATUS_UNSUCCESSFUL;
+    }
+        
+    if(!SanitizedPassword(Password, PasswordLength))
+    {
+        printf("%s", "Password must have at least 5 characters and contain at least one digit, one lowercase letter, one uppercase letter, and at least one special symbol(!@#$%^&)\n");
+        return STATUS_UNSUCCESSFUL;
+    }
 
     // check if user exists:
-    if (usernameExists(Username)) {
-        printf("Username exists\n");
+    if (usernameExists(Username)) 
+    {
+        printf("Username already exists!\n");
+        return STATUS_UNSUCCESSFUL;
     }
-    else {
-        printf("Username doesn't exist\n");
+   
+
+    /// INPUT is good and Username doesn't exist
+
+    /// Hash password 
+    char hash[MD5LEN * 2 + 1];  // Buffer for hex hash + null terminator
+    DWORD hashlen = sizeof(hash);
+    if (EncryptPassword((const BYTE*)Password, (DWORD)PasswordLength, hash, &hashlen) != 0) 
+    {
+        return STATUS_UNSUCCESSFUL;
     }
+    printf("Pass hash: %s\n", hash);
+
+   /* if (VerifyPassword((const BYTE*)Password, (DWORD)PasswordLength, hash, hashlen))
+    {*/
+        printf("%d\n", VerifyPassword((const BYTE*)Password, (DWORD)PasswordLength, hash, hashlen));
+    //}
+
 
     // close file
     if (g_hFileUsersDB != INVALID_HANDLE_VALUE) {
@@ -242,7 +254,7 @@ SafeStorageHandleRegister(
 }
 
 
-NTSTATUS WINAPI
+NTSTATUS WINAPI 
 SafeStorageHandleLogin(
     const char* Username,
     uint16_t UsernameLength,

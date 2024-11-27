@@ -9,9 +9,12 @@
   <ItemGroup>
     <ClInclude Include="Commands.h" />
     <ClInclude Include="includes.h" />
+    <ClInclude Include="Store.h" />
+    <ClInclude Include="Utils.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Commands.c" />
+    <ClCompile Include="Utils.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{3DAF6FE9-7A39-4C6B-9943-A66CD6274E39}</ProjectGuid>

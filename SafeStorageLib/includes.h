@@ -35,6 +35,7 @@
 #include <strsafe.h>
 #include <tchar.h>
 
+
 #pragma comment(lib, "Bcrypt.lib")
     #include <Bcrypt.h>
 

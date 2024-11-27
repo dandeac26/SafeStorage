@@ -3,10 +3,14 @@
 
 
 #include "includes.h"
+#include "Utils.h"
+
 EXTERN_C_START;
 
 #define SUCCESS 1
 #define FAIL 0
+#define true 1
+#define false 0
 
 extern TCHAR g_AppDir[MAX_PATH];
 extern DWORD g_AppDirBuffSize;
