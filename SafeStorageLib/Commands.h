@@ -15,6 +15,17 @@ EXTERN_C_START;
 extern TCHAR g_AppDir[MAX_PATH];
 extern DWORD g_AppDirBuffSize;
 extern HANDLE g_hFileUsersDB;
+
+//typedef struct SESSION_DATA
+//{
+//    char* LoggedUser;
+//
+//
+//};
+
+//static char* LoggedUser;
+
+
 /*
  * @brief       This command will be called at the beginning to initialize support for the safe storage lib.
  *              Here you can create global data, find %APPDIR%, and allocate/ create any resources you consider necessary
