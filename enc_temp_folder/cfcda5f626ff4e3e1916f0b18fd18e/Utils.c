@@ -185,8 +185,8 @@ DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* has
 
 DWORD VerifyPassword(const BYTE* password, DWORD length, char* hash, DWORD hashlen) 
 {
-    //printf("Given hash : %s\n", hash);
-    if (password == NULL || hash == NULL || hashlen != (MD5LEN * 2))
+    printf("Given hash : %s\n", hash);
+    if (password == NULL || hash == NULL || hashlen != (MD5LEN * 2 ))
     {
         // Invalid parameters
         return false;
@@ -198,7 +198,7 @@ DWORD VerifyPassword(const BYTE* password, DWORD length, char* hash, DWORD hashl
     if (EncryptPassword(password, length, generatedHash, &generatedHashlen) != 0) {
         return false;
     }
-    //printf("Generated hash : %s\nGiven hash : %s\n", generatedHash, hash); 
+    printf("Generated hash : %s\nGiven hash : %s\n", generatedHash, hash);
     if (strncmp(generatedHash, hash, hashlen) == 0)
     {
        return true;  // Passwords match

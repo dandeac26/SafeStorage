@@ -222,18 +222,17 @@ SafeStorageHandleRegister(
     /// Hash password 
     char hash[MD5LEN * 2 + 1];  // Buffer for hex hash + null terminator
     DWORD hashlen = sizeof(hash);
-
     if (EncryptPassword((const BYTE*)Password, (DWORD)PasswordLength, hash, &hashlen) != 0) 
     {
         return STATUS_UNSUCCESSFUL;
     }
-
-    //printf("Pass hash: %s\n", hash);
+    printf("Pass hash: %s\n", hash);
     
-
+    char testhash[] = "7d151bc844f266a1e6c70fee1a52e360";
+    //                 7d151bc844f266a1e6c70fee1a52e360
    /* if (VerifyPassword((const BYTE*)Password, (DWORD)PasswordLength, hash, hashlen))
     {*/
-        //printf("%d\n", VerifyPassword((const BYTE*)Password, (DWORD)PasswordLength, testhash, strlen(testhash)));
+        printf("%d\n", VerifyPassword((const BYTE*)Password, (DWORD)PasswordLength, testhash, strlen(testhash)));
     //}
 
 
