@@ -120,7 +120,9 @@ VOID WINAPI SafeStorageDeinit(VOID)
 
 int usernameExists(const char* username)
 {
-    g_hFileUsersDB = CreateFile(
+    int result = FAIL;
+
+    HANDLE FileUsersDB = CreateFile(
         _T("users.txt"),
         GENERIC_READ,
         0,
@@ -131,14 +133,14 @@ int usernameExists(const char* username)
     );
 
     // Check if users.txt file is open 
-    if (g_hFileUsersDB == INVALID_HANDLE_VALUE) {
+    if (FileUsersDB == INVALID_HANDLE_VALUE) {
         if (createUsersDatabase() == FAIL) {
             displayExitMSG();
-            return STATUS_UNSUCCESSFUL;
+            return result;
         }
     }
 
-    SetFilePointer(g_hFileUsersDB, 0, NULL, FILE_BEGIN);
+    SetFilePointer(FileUsersDB, 0, NULL, FILE_BEGIN);
 
     char buffer[256];
     DWORD bytesRead;
@@ -149,9 +151,9 @@ int usernameExists(const char* username)
 
     while (TRUE) 
     {
-        if (!ReadFile(g_hFileUsersDB, buffer, sizeof(buffer) - 1, &bytesRead, NULL)) {
+        if (!ReadFile(FileUsersDB, buffer, sizeof(buffer) - 1, &bytesRead, NULL)) {
             printf("ReadFile failed: %d\n", GetLastError());
-            return FAIL;
+            return result;
         }
 
         if (bytesRead == 0) {
@@ -169,25 +171,33 @@ int usernameExists(const char* username)
             char* encryptedPassword = strtok(NULL, ":");
 
             if (fileUser && encryptedPassword && strcmp(fileUser, username) == 0) {
-                return SUCCESS; 
+                result = SUCCESS;
+                break;
             }
 
             memmove(lineBuffer, lineEnd + 1, strlen(lineEnd + 1) + 1);
         }
     }
 
-    if (strlen(lineBuffer) > 0) {
+    if (strlen(lineBuffer) > 0 && result != SUCCESS) {
         
         char* fileUser = strtok(lineBuffer, ":");
         char* encryptedPassword = strtok(NULL, ":");
 
         if (fileUser && encryptedPassword && strcmp(fileUser, username) == 0) {
-            return SUCCESS; 
+            result = SUCCESS; 
         }
     }
 
-    return FAIL;
+    if (FileUsersDB != INVALID_HANDLE_VALUE) {
+        CloseHandle(FileUsersDB);  // Close the handle to the file
+        FileUsersDB = INVALID_HANDLE_VALUE; // Set handle to an invalid value after closing
+    }
+
+    return result;
 }
+
+
 
 NTSTATUS WINAPI 
 SafeStorageHandleRegister(
@@ -197,65 +207,42 @@ SafeStorageHandleRegister(
     uint16_t PasswordLength
 )
 {
-    if (!SanitizedUsername(Username, UsernameLength)) 
+   
+    if (!ValidCredentials(Username, UsernameLength, Password, PasswordLength))
     {
-        printf("%s", "Username should contain only English alphabet letters (a - zA - Z) and be between 5 and 10 characters long\n");
-        return STATUS_UNSUCCESSFUL;
-    }
-        
-    if(!SanitizedPassword(Password, PasswordLength))
-    {
-        printf("%s", "Password must have at least 5 characters and contain at least one digit, one lowercase letter, one uppercase letter, and at least one special symbol(!@#$%^&)\n");
         return STATUS_UNSUCCESSFUL;
     }
 
     // check if user exists:
-    if (usernameExists(Username)) 
+    if (usernameExists(Username))
     {
         printf("Username already exists!\n");
         return STATUS_UNSUCCESSFUL;
     }
-   
 
-    /// INPUT is good and Username doesn't exist
+    /// INPUT is good and Username doesn't already exist:
 
-    /// Hash password 
-    char hash[MD5LEN * 2 + 1];  // Buffer for hex hash + null terminator
+    char hash[HASH_SIZE];
     DWORD hashlen = sizeof(hash);
 
+    /// Hash password 
     if (EncryptPassword((const BYTE*)Password, (DWORD)PasswordLength, hash, &hashlen) != 0) 
     {
         return STATUS_UNSUCCESSFUL;
     }
 
-    //printf("Pass hash: %s\n", hash);
-    
-
-   /* if (VerifyPassword((const BYTE*)Password, (DWORD)PasswordLength, hash, hashlen))
-    {*/
-        //printf("%d\n", VerifyPassword((const BYTE*)Password, (DWORD)PasswordLength, testhash, strlen(testhash)));
-    //}
-
-
-    // close file
-    if (g_hFileUsersDB != INVALID_HANDLE_VALUE) {
-        CloseHandle(g_hFileUsersDB);  // Close the handle to the file
-        g_hFileUsersDB = INVALID_HANDLE_VALUE; // Set handle to an invalid value after closing
-    }
-
-
-    /* The function is not implemented. It is your responsibility. */
-    /* After you implement the function, you can remove UNREFERENCED_PARAMETER(x). */
-    /* This is just to prevent a compilation warning that the parameter is unused. */
-
-    UNREFERENCED_PARAMETER(Username);
-    UNREFERENCED_PARAMETER(UsernameLength);
-    UNREFERENCED_PARAMETER(Password);
-    UNREFERENCED_PARAMETER(PasswordLength);
+    InsertUser(Username, hash);
 
     return STATUS_SUCCESS;
 }
 
+NTSTATUS WINAPI LoginUser(const char* Username, uint16_t UsernameLength)
+{
+    UNREFERENCED_PARAMETER(Username);
+    UNREFERENCED_PARAMETER(UsernameLength);
+
+    return STATUS_NOT_IMPLEMENTED;
+}
 
 NTSTATUS WINAPI 
 SafeStorageHandleLogin(
@@ -265,16 +252,34 @@ SafeStorageHandleLogin(
     uint16_t PasswordLength
 )
 {
-    /* The function is not implemented. It is your responsibility. */
-    /* After you implement the function, you can remove UNREFERENCED_PARAMETER(x). */
-    /* This is just to prevent a compilation warning that the parameter is unused. */
     
-    UNREFERENCED_PARAMETER(Username);
-    UNREFERENCED_PARAMETER(UsernameLength);
-    UNREFERENCED_PARAMETER(Password);
-    UNREFERENCED_PARAMETER(PasswordLength);
+    if (!(ValidCredentials(Username, UsernameLength, Password, PasswordLength) && usernameExists(Username)))
+    {
+        printf("Invalid Credentials!\n");
+        return STATUS_UNSUCCESSFUL;
+    }
 
-    return STATUS_NOT_IMPLEMENTED;
+    char retrievedHash[HASH_SIZE];
+    DWORD retrievedHashLen = sizeof(retrievedHash);
+
+    if (RetrieveHash(Username, retrievedHash, &retrievedHashLen) == FAIL)
+    {
+        printf("Corresponding Hash could not be retrieved!\n");
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    if(VerifyPassword((const BYTE*) Password, (DWORD)PasswordLength, retrievedHash, retrievedHashLen))
+    {
+        printf("SUCCESS!!\n");
+        LoginUser(Username, UsernameLength);
+    }
+    else
+    {
+        printf("FAILED!!\n");
+    }
+   
+
+    return STATUS_SUCCESS;
 }
 
 
