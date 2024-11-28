@@ -289,7 +289,7 @@ SafeStorageHandleLogin(
         printf("FAILED!!\n");
     }
    
-    printf("%s\n", LoggedUser);
+    printf("%s\n",  LoggedUser);
 
     return STATUS_SUCCESS;
 }
