@@ -4,6 +4,8 @@ TCHAR g_AppDir[MAX_PATH];
 DWORD g_AppDirBuffSize;
 HANDLE g_hFileUsersDB;
 
+static char* LoggedUser = NULL;
+
 int createUsersDirectory(VOID) 
 {
     TCHAR dirPath[MAX_PATH];
@@ -180,12 +182,12 @@ int usernameExists(const char* username)
     }
 
     if (strlen(lineBuffer) > 0 && result != SUCCESS) {
-        
+
         char* fileUser = strtok(lineBuffer, ":");
         char* encryptedPassword = strtok(NULL, ":");
 
         if (fileUser && encryptedPassword && strcmp(fileUser, username) == 0) {
-            result = SUCCESS; 
+            result = SUCCESS;
         }
     }
 
@@ -199,7 +201,7 @@ int usernameExists(const char* username)
 
 
 
-NTSTATUS WINAPI 
+NTSTATUS WINAPI
 SafeStorageHandleRegister(
     const char* Username,
     uint16_t UsernameLength,
@@ -207,7 +209,7 @@ SafeStorageHandleRegister(
     uint16_t PasswordLength
 )
 {
-   
+
     if (!ValidCredentials(Username, UsernameLength, Password, PasswordLength))
     {
         return STATUS_UNSUCCESSFUL;
@@ -226,7 +228,7 @@ SafeStorageHandleRegister(
     DWORD hashlen = sizeof(hash);
 
     /// Hash password 
-    if (EncryptPassword((const BYTE*)Password, (DWORD)PasswordLength, hash, &hashlen) != 0) 
+    if (EncryptPassword((const BYTE*)Password, (DWORD)PasswordLength, hash, &hashlen) != 0)
     {
         return STATUS_UNSUCCESSFUL;
     }
@@ -238,13 +240,19 @@ SafeStorageHandleRegister(
 
 NTSTATUS WINAPI LoginUser(const char* Username, uint16_t UsernameLength)
 {
-    UNREFERENCED_PARAMETER(Username);
-    UNREFERENCED_PARAMETER(UsernameLength);
 
+
+    LoggedUser = calloc(sizeof(char), (UsernameLength + 1));
+    strncpy_s(LoggedUser, UsernameLength + 1, Username, UsernameLength);
+
+
+    /*UNREFERENCED_PARAMETER(Username);
+    UNREFERENCED_PARAMETER(UsernameLength);
+*/
     return STATUS_NOT_IMPLEMENTED;
 }
 
-NTSTATUS WINAPI 
+NTSTATUS WINAPI
 SafeStorageHandleLogin(
     const char* Username,
     uint16_t UsernameLength,
@@ -252,7 +260,7 @@ SafeStorageHandleLogin(
     uint16_t PasswordLength
 )
 {
-    
+
     if (!(ValidCredentials(Username, UsernameLength, Password, PasswordLength) && usernameExists(Username)))
     {
         printf("Invalid Credentials!\n");
@@ -268,16 +276,20 @@ SafeStorageHandleLogin(
         return STATUS_UNSUCCESSFUL;
     }
 
-    if(VerifyPassword((const BYTE*) Password, (DWORD)PasswordLength, retrievedHash, retrievedHashLen))
+    if (VerifyPassword((const BYTE*)Password, (DWORD)PasswordLength, retrievedHash, retrievedHashLen))
     {
         printf("SUCCESS!!\n");
-        LoginUser(Username, UsernameLength);
+        if (LoginUser(Username, UsernameLength) == FAIL)
+        {
+            return STATUS_UNSUCCESSFUL;
+        }
     }
     else
     {
         printf("FAILED!!\n");
     }
    
+    printf("%s\n",  LoggedUser);
 
     return STATUS_SUCCESS;
 }
