@@ -12,19 +12,18 @@ EXTERN_C_START;
 #define true 1
 #define false 0
 
+#define MAX_ATTEMPTS_PER_SECOND 1
+#define TRACKER_CAPACITY 100
+
+typedef struct {
+    char Username[256];
+    uint32_t AttemptCount;
+    time_t FirstAttemptTime;
+} LoginRateTracker;
+
 extern TCHAR g_AppDir[MAX_PATH];
 extern DWORD g_AppDirBuffSize;
 extern HANDLE g_hFileUsersDB;
-
-//typedef struct SESSION_DATA
-//{
-//    char* LoggedUser;
-//
-//
-//};
-
-//static char* LoggedUser;
-
 
 /*
  * @brief       This command will be called at the beginning to initialize support for the safe storage lib.

@@ -1,5 +1,193 @@
 #include "Utils.h"
 
+
+int createUsersDatabase(VOID)
+{
+    const TCHAR* fileName = _T("users.txt");
+
+    // check if file exists
+    DWORD fileAttributes = GetFileAttributes(fileName);
+    if (fileAttributes != INVALID_FILE_ATTRIBUTES &&
+        !(fileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+    {
+        return SUCCESS;
+    }
+
+    // if doesn't exist, create it
+    g_hFileUsersDB = CreateFile(
+        fileName,
+        GENERIC_WRITE | GENERIC_READ,
+        0,
+        NULL,
+        CREATE_NEW,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+
+    // Check if the file was created successfully
+    if (g_hFileUsersDB == INVALID_HANDLE_VALUE) {
+        printf("Error creating file: (%d)", GetLastError());
+        return FAIL;
+    }
+    return SUCCESS;
+}
+
+
+void displayExitMSG(VOID)
+{
+    printf("\nPress Enter to exit...");
+    //getchar();
+}
+
+int createUsersDirectory(VOID)
+{
+    TCHAR dirPath[MAX_PATH];
+    _tcscpy_s(dirPath, MAX_PATH, g_AppDir);
+
+    if (PathAppend(dirPath, _T("users")) == 0)
+    {
+        printf("Error: failed to append users dir to APPDIR.\n");
+        return FAIL;
+    }
+
+    DWORD attributes = GetFileAttributes(dirPath);
+
+    if (attributes == INVALID_FILE_ATTRIBUTES)
+    {
+        if (!CreateDirectory((LPCWSTR)dirPath, NULL))
+        {
+            printf("CreateDirectory failed (%d)\n", GetLastError());
+            return FAIL;
+        }
+        else return SUCCESS;
+    }
+
+    if (attributes & FILE_ATTRIBUTE_DIRECTORY)
+    {
+        printf("Directory exists.\n");
+        return SUCCESS;
+    }
+
+    printf("Path exists, but it's not a directory.\n");
+    return FAIL;
+}
+
+
+int createNewUserDirectory(const char* Username, uint16_t UsernameLength)
+{
+    TCHAR dirPath[MAX_PATH];
+    _tcscpy_s(dirPath, MAX_PATH, g_AppDir);
+
+    if (PathAppend(dirPath, _T("users")) == 0)
+    {
+        printf("Error: failed to append users dir to APPDIR.\n");
+        return FAIL;
+    }
+
+    TCHAR usr[12];
+    uint16_t i;
+    for (i = 0; i < UsernameLength; i++)
+    {
+        usr[i] = Username[i];
+    }
+    usr[i] = '\0';
+
+    if (PathAppend(dirPath, usr) == 0)
+    {
+        printf("Error: failed to append %s dir to APPDIR.\n", Username);
+        return FAIL;
+    }
+
+    if (!SanitizeFilePath2(dirPath, _tcslen(dirPath)))
+    {
+        //_tprintf(TEXT("Bad path: %s"), dirPath);
+        printf("sanitize fail\n");
+        return FAIL;
+    }
+
+    DWORD attributes = GetFileAttributes(dirPath);
+
+    if (attributes == INVALID_FILE_ATTRIBUTES)
+    {
+        if (!CreateDirectory((LPCWSTR)dirPath, NULL))
+        {
+            printf("CreateDirectory failed (%d)\n", GetLastError());
+            return FAIL;
+        }
+        else
+        {
+            return SUCCESS;
+        }
+    }
+
+    if (attributes & FILE_ATTRIBUTE_DIRECTORY)
+    {
+        printf("Directory exists.\n");
+        
+        // This means that path already exists, which should not during registration, so
+        // actually should return fail..
+        return FAIL;
+    }
+
+    printf("Path exists, but it's not a directory.\n");
+    return FAIL;
+}
+
+
+int buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength, TCHAR* UserDirPath)
+{
+    TCHAR dirPath[MAX_PATH];
+    _tcscpy_s(dirPath, MAX_PATH, g_AppDir);
+
+    if (PathAppend(dirPath, _T("users")) == 0)
+    {
+        printf("Error: failed to append users dir to APPDIR.\n");
+        return FAIL;
+    }
+
+    TCHAR usr[12];
+    uint16_t i;
+    for (i = 0; i < UsernameLength; i++)
+    {
+        usr[i] = Username[i];
+    }
+    usr[i] = '\0';
+
+    if (PathAppend(dirPath, usr) == 0)
+    {
+        printf("Error: failed to append %s dir to APPDIR.\n", Username);
+        return FAIL;
+    }
+
+    if (!SanitizeFilePath2(dirPath, _tcslen(dirPath)))
+    {
+        printf("sanitize fail\n");
+        return FAIL;
+    }
+
+    DWORD attributes = GetFileAttributes(dirPath);
+
+    if (attributes == INVALID_FILE_ATTRIBUTES)
+    {
+        printf("Directory doesn't exist!\n");
+        return FAIL;
+    }
+
+    if (!(attributes & FILE_ATTRIBUTE_DIRECTORY))
+    {
+        printf("Path exists, but its not a directory!\n");
+        // If dir doesn't exist already, return fail!
+        return FAIL;
+    }
+
+    if (_tcsncpy_s(UserDirPath, MAX_PATH, dirPath, _tcslen(dirPath)) != 0) {
+        return FAIL;
+    }
+    // need to check if a file named as directory exists maybe? but i hope file atrib directory handles this
+    return SUCCESS;
+}
+
+
 int IsSpecialCharacter(char ch) 
 {
     const char* specialChars = "!@#$%^&";
@@ -67,7 +255,7 @@ int SanitizedPassword(const char* password, uint16_t length)
 }
 
 
-int SanitizeFilePath(const char* filepath, uint16_t length, LPCSTR appdir)
+int SanitizeFilePath(const char* filepath, size_t length, LPCSTR appdir)
 {
     if (length == 0 || filepath == NULL) 
     {
@@ -98,7 +286,7 @@ int SanitizeFilePath(const char* filepath, uint16_t length, LPCSTR appdir)
     }
 
     
-    for (uint16_t i = 0; i < length; i++) 
+    for (size_t i = 0; i < length; i++) 
     {
         if (filepath[i] == '\0')
         {
@@ -115,6 +303,37 @@ int SanitizeFilePath(const char* filepath, uint16_t length, LPCSTR appdir)
 }
 
 
+int SanitizeFilePath2(const TCHAR* filepath, size_t length) // with normalization
+{
+    if (length == 0 || filepath == NULL)
+    {
+        return false;
+    }
+    
+    TCHAR resolvedBasePath[MAX_PATH];
+
+    if (GetFullPathName((LPCWSTR)filepath, MAX_PATH, (LPWSTR)resolvedBasePath, NULL) == 0)
+    {
+        return false;
+    }
+
+    if (_tcsncmp((const TCHAR*)filepath, (const TCHAR*)resolvedBasePath, _tcslen((const TCHAR*)filepath)) != 0)
+    {
+        return false;
+    }
+
+    for (size_t i = 0; i < length; i++)
+    {
+        if (filepath[i] == '\0')
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
 DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* hashlen)
 {
     DWORD dwStatus = 0;
@@ -125,7 +344,6 @@ DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* has
     CHAR rgbDigits[] = "0123456789abcdef";
    
 
-    // Get handle to the crypto provider
     if (!CryptAcquireContext(&hProv,
         NULL,
         NULL,
@@ -165,7 +383,7 @@ DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* has
             hash[j++] = rgbDigits[rgbHash[i] >> 4];
             hash[j++] = rgbDigits[rgbHash[i] & 0xf];
         }
-        hash[j] = '\0';  // Null-terminate the string
+        hash[j] = '\0';
         *hashlen = j+1;
     }
     else
@@ -185,7 +403,6 @@ DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* has
 
 DWORD VerifyPassword(const BYTE* password, DWORD length, char* hash, DWORD hashlen) 
 {
-    //printf("Given hash : %s\n", hash);
     if (password == NULL || hash == NULL || hashlen != (HASH_SIZE-1))
     {
         // Invalid parameters
@@ -198,7 +415,7 @@ DWORD VerifyPassword(const BYTE* password, DWORD length, char* hash, DWORD hashl
     if (EncryptPassword(password, length, generatedHash, &generatedHashlen) != 0) {
         return false;
     }
-    //printf("Generated hash : %s\nGiven hash : %s\n", generatedHash, hash); 
+    
     if (strncmp(generatedHash, hash, hashlen) == 0)
     {
        return true;  // Passwords match
@@ -210,7 +427,7 @@ DWORD VerifyPassword(const BYTE* password, DWORD length, char* hash, DWORD hashl
 
 void InsertUser(const char* Username, const char* hash)
 {
-    // Open the users.txt file in append mode
+   
     HANDLE FileUsersDB = CreateFile(
         _T("users.txt"),
         FILE_APPEND_DATA,
@@ -221,18 +438,18 @@ void InsertUser(const char* Username, const char* hash)
         NULL
     );
 
-    // Check if the file was opened successfully
+   
     if (FileUsersDB == INVALID_HANDLE_VALUE) {
         printf("Failed to open users.txt: %d\n", GetLastError());
         return;
     }
 
-    // Create the line to append: "username:hash\n"
+   
     char lineBuffer[512];
     memset(lineBuffer, 0, sizeof(lineBuffer));
     snprintf(lineBuffer, sizeof(lineBuffer) - 1, "\n%s:%s", Username, hash);
 
-    // Write the line to the file
+    
     DWORD bytesWritten;
     BOOL writeSuccess = WriteFile(
         FileUsersDB,
@@ -242,7 +459,7 @@ void InsertUser(const char* Username, const char* hash)
         NULL
     );
 
-    // Check if writing succeeded
+   
     if (!writeSuccess || bytesWritten != strlen(lineBuffer)) {
         printf("Failed to write to users.txt: %d\n", GetLastError());
     }
@@ -250,7 +467,7 @@ void InsertUser(const char* Username, const char* hash)
         printf("User '%s' added successfully.\n", Username);
     }
 
-    // Close the file handle
+  
     CloseHandle(FileUsersDB);
 }
 
@@ -274,114 +491,6 @@ int ValidCredentials(const char* Username, uint16_t UsernameLength, const char* 
 }
 
 
-//int RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHashLen)
-//{
-//    HANDLE FileUsersDB = CreateFile(
-//        _T("users.txt"),
-//        GENERIC_READ,
-//        0,
-//        NULL,
-//        OPEN_EXISTING,
-//        FILE_ATTRIBUTE_NORMAL,
-//        NULL
-//    );
-//
-//    // Check if the file was opened successfully
-//    if (FileUsersDB == INVALID_HANDLE_VALUE) {
-//        printf("Failed to open users.txt: %d\n", GetLastError());
-//        return;
-//    }
-//
-//    // return the hash coinciding to username
-//    
-//
-//    // Close the file handle
-//    CloseHandle(FileUsersDB);
-//}
-
-//int RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHashLen)
-//{
-//    int result = FAIL;
-//
-//    HANDLE FileUsersDB = CreateFile(
-//        _T("users.txt"),
-//        GENERIC_READ,
-//        0,
-//        NULL,
-//        OPEN_EXISTING,
-//        FILE_ATTRIBUTE_NORMAL,
-//        NULL
-//    );
-//
-//    // Check if users.txt file is open 
-//    if (FileUsersDB == INVALID_HANDLE_VALUE) 
-//    {
-//        return result;
-//    }
-//
-//    SetFilePointer(FileUsersDB, 0, NULL, FILE_BEGIN);
-//
-//    char buffer[256];
-//    DWORD bytesRead;
-//    char lineBuffer[512];
-//    memset(lineBuffer, 0, 512);
-//    lineBuffer[511] = '\0';
-//    char* lineEnd = NULL;
-//    char* Context;
-//
-//    while (TRUE)
-//    {
-//        if (!ReadFile(FileUsersDB, buffer, sizeof(buffer) - 1, &bytesRead, NULL)) {
-//            printf("ReadFile failed: %d\n", GetLastError());
-//            return result;
-//        }
-//
-//        if (bytesRead == 0) {
-//            break;
-//        }
-//
-//        buffer[bytesRead] = '\0';
-//
-//        strncat_s(lineBuffer, sizeof(lineBuffer), buffer, sizeof(lineBuffer) - strlen(lineBuffer) - 1);
-//
-//        while ((lineEnd = strchr(lineBuffer, '\n')) != NULL) {
-//            *lineEnd = '\0';
-//
-//            char* fileUser = strtok_s(lineBuffer, ":", &Context);
-//            char* encryptedPassword = strtok_s(NULL, ":", &Context);
-//
-//            if (fileUser && encryptedPassword && strcmp(fileUser, Username) == 0) {
-//                result = SUCCESS;
-//                strncpy_s(retrievedHash, strlen(encryptedPassword), encryptedPassword, HASH_SIZE);
-//                *retrievedHashLen = strlen(encryptedPassword);
-//                break;
-//            }
-//
-//            memmove(lineBuffer, lineEnd + 1, strlen(lineEnd + 1) + 1);
-//        }
-//    }
-//
-//    if (strlen(lineBuffer) > 0 && result != SUCCESS) {
-//
-//        char* fileUser = strtok_s(lineBuffer, ":", &Context);
-//        char* encryptedPassword = strtok_s(NULL, ":", &Context);
-//
-//        if (fileUser && encryptedPassword && strcmp(fileUser, Username) == 0) {
-//            result = SUCCESS;
-//            strncpy_s(retrievedHash, strlen(encryptedPassword), encryptedPassword, HASH_SIZE);
-//            *retrievedHashLen = strlen(encryptedPassword);
-//        }
-//    }
-//
-//    if (FileUsersDB != INVALID_HANDLE_VALUE) {
-//        CloseHandle(FileUsersDB);  // Close the handle to the file
-//        FileUsersDB = INVALID_HANDLE_VALUE; // Set handle to an invalid value after closing
-//    }
-//
-//    return result;
-//}
-
-
 int RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHashLen)
 {
     int result = FAIL;
@@ -396,7 +505,7 @@ int RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHash
         NULL
     );
 
-    // Check if users.txt file is open 
+    
     if (FileUsersDB == INVALID_HANDLE_VALUE)
     {
         return result;
@@ -426,48 +535,42 @@ int RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHash
 
         buffer[bytesRead] = '\0';
 
-        // Safely concatenate the contents of the buffer to lineBuffer
         strncat_s(lineBuffer, sizeof(lineBuffer), buffer, sizeof(lineBuffer) - strlen(lineBuffer) - 1);
 
         while ((lineEnd = strchr(lineBuffer, '\n')) != NULL) {
-            *lineEnd = '\0';  // Null-terminate at the newline
+            *lineEnd = '\0';  
 
-            // Tokenize the line
             char* fileUser = strtok_s(lineBuffer, ":", &Context);
             char* encryptedPassword = strtok_s(NULL, ":", &Context);
 
-            // Check if the user matches
             if (fileUser && encryptedPassword && strcmp(fileUser, Username) == 0) {
                 result = SUCCESS;
-                // Copy the encrypted password to retrievedHash safely
-                strncpy_s(retrievedHash, HASH_SIZE, encryptedPassword, HASH_SIZE - 1); // Always leave space for null-termination
+                
+                strncpy_s(retrievedHash, HASH_SIZE, encryptedPassword, HASH_SIZE - 1); 
                 *retrievedHashLen = strlen(encryptedPassword);
                 break;
             }
 
-            // Move the remaining part of the buffer
             memmove(lineBuffer, lineEnd + 1, strlen(lineEnd + 1) + 1);
         }
 
-        // If a user was found during the loop, break out
         if (result == SUCCESS) {
             break;
         }
     }
 
-    // Handle the case where the last line does not end with a newline
+   
     if (strlen(lineBuffer) > 0 && result != SUCCESS) {
         char* fileUser = strtok_s(lineBuffer, ":", &Context);
         char* encryptedPassword = strtok_s(NULL, ":", &Context);
 
         if (fileUser && encryptedPassword && strcmp(fileUser, Username) == 0) {
             result = SUCCESS;
-            strncpy_s(retrievedHash, HASH_SIZE, encryptedPassword, HASH_SIZE - 1);  // Safely copy the hash
+            strncpy_s(retrievedHash, HASH_SIZE, encryptedPassword, HASH_SIZE - 1); 
             *retrievedHashLen = strlen(encryptedPassword);
         }
     }
 
-    // Clean up and close the file handle
     CloseHandle(FileUsersDB);
     return result;
 }

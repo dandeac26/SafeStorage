@@ -4,79 +4,14 @@ TCHAR g_AppDir[MAX_PATH];
 DWORD g_AppDirBuffSize;
 HANDLE g_hFileUsersDB;
 
-static char* LoggedUser = NULL;
-
-int createUsersDirectory(VOID) 
+typedef struct APP_STATE_STRUCT
 {
-    TCHAR dirPath[MAX_PATH];
-    _tcscpy_s(dirPath, MAX_PATH, g_AppDir);
+    char* LoggedUser;
+    TCHAR* CurrentUserDirectory;
+}APP_STATE;
 
-    if (PathAppend(dirPath, _T("users")) == 0)
-    {
-        printf("Error: failed to append users dir to APPDIR.\n");
-        return FAIL;
-    }
+static APP_STATE AppState;
 
-    DWORD attributes = GetFileAttributes(dirPath);
-
-    if (attributes == INVALID_FILE_ATTRIBUTES)
-    {
-        if (!CreateDirectory((LPCWSTR)dirPath, NULL))
-        {
-            printf("CreateDirectory failed (%d)\n", GetLastError());
-            return FAIL;
-        }
-        else return SUCCESS;
-    }
-   
-    if (attributes & FILE_ATTRIBUTE_DIRECTORY) 
-    {
-        //printf("Directory exists.\n");
-        return SUCCESS;
-    }
-
-    printf("Path exists, but it's not a directory.\n");
-    return FAIL;
-}
-
-
-int createUsersDatabase(VOID) 
-{
-    const TCHAR* fileName = _T("users.txt");
-
-    // check if file exists
-    DWORD fileAttributes = GetFileAttributes(fileName);
-    if (fileAttributes != INVALID_FILE_ATTRIBUTES &&
-        !(fileAttributes & FILE_ATTRIBUTE_DIRECTORY)) 
-    {
-        return SUCCESS; 
-    }
-
-    // if doesn't exist, create it
-    g_hFileUsersDB = CreateFile(
-        fileName,                  
-        GENERIC_WRITE | GENERIC_READ,             
-        0,                          
-        NULL,                       
-        CREATE_NEW,                
-        FILE_ATTRIBUTE_NORMAL,      
-        NULL                        
-    );
-
-    // Check if the file was created successfully
-    if (g_hFileUsersDB == INVALID_HANDLE_VALUE) {
-        printf("Error creating file: (%d)",GetLastError());
-        return FAIL;
-    }
-    return SUCCESS;
-}
-
-
-void displayExitMSG(VOID) 
-{
-    printf("\nPress Enter to exit...");
-    getchar();
-}
 
 NTSTATUS WINAPI SafeStorageInit(VOID)
 {
@@ -102,6 +37,9 @@ NTSTATUS WINAPI SafeStorageInit(VOID)
         return STATUS_UNSUCCESSFUL;
     }
 
+    AppState.LoggedUser = NULL;
+    AppState.CurrentUserDirectory = NULL;
+
     return STATUS_SUCCESS;
 }
 
@@ -113,9 +51,17 @@ VOID WINAPI SafeStorageDeinit(VOID)
         CloseHandle(g_hFileUsersDB);  // Close the handle to the file
         g_hFileUsersDB = INVALID_HANDLE_VALUE; // Set handle to an invalid value after closing
     }
-    /* The function is not implemented. It is your responsibility. */
-    /* Here you can clean up any global objects you have created earlier. */
 
+    if (AppState.LoggedUser != NULL)
+    {
+        free(AppState.LoggedUser);
+    }
+
+    if (AppState.CurrentUserDirectory != NULL)
+    {
+        free(AppState.CurrentUserDirectory);
+    }
+   
     return;
 }
 
@@ -209,6 +155,11 @@ SafeStorageHandleRegister(
     uint16_t PasswordLength
 )
 {
+    if (AppState.LoggedUser != NULL)
+    {
+        printf_s("User %s is logged in already. Logout is needed to perform this action.\n", AppState.LoggedUser);
+        return STATUS_UNSUCCESSFUL;
+    }
 
     if (!ValidCredentials(Username, UsernameLength, Password, PasswordLength))
     {
@@ -235,22 +186,88 @@ SafeStorageHandleRegister(
 
     InsertUser(Username, hash);
 
+    createNewUserDirectory(Username, UsernameLength);
+
     return STATUS_SUCCESS;
 }
 
-NTSTATUS WINAPI LoginUser(const char* Username, uint16_t UsernameLength)
+int LoginUser(const char* Username, uint16_t UsernameLength)
 {
+    AppState.CurrentUserDirectory = (TCHAR*)calloc(sizeof(TCHAR), MAX_PATH);
+    
+    if (buildUserPathAndCheckIfExists(Username, UsernameLength, AppState.CurrentUserDirectory) == FAIL) 
+    {
+        printf("User directory no longer exists.\n");
+        return FAIL;
+    }
+
+    printf("current user dir : ");
+    _tprintf(AppState.CurrentUserDirectory);
+    printf("\n");
+
+    AppState.LoggedUser = calloc(sizeof(char), (UsernameLength + 1));
+    strncpy_s(AppState.LoggedUser, UsernameLength + 1, Username, UsernameLength);
 
 
-    LoggedUser = calloc(sizeof(char), (UsernameLength + 1));
-    strncpy_s(LoggedUser, UsernameLength + 1, Username, UsernameLength);
-
-
-    /*UNREFERENCED_PARAMETER(Username);
-    UNREFERENCED_PARAMETER(UsernameLength);
-*/
-    return STATUS_NOT_IMPLEMENTED;
+    return SUCCESS;
 }
+
+
+LoginRateTracker LoginTrackers[TRACKER_CAPACITY];
+size_t TrackerCount = 0;
+
+
+LoginRateTracker* FindOrCreateTracker(const char* Username) 
+{
+    for (size_t i = 0; i < TrackerCount; i++) 
+    {
+        if (strncmp(LoginTrackers[i].Username, Username, strlen(Username)) == 0)
+        {
+            return &LoginTrackers[i];
+        }
+    }
+
+    if (TrackerCount >= TRACKER_CAPACITY) {
+        printf("Tracker storage is full! resetting all trackers.\n");
+        for (size_t i = 0; i < TrackerCount; i++) {
+            LoginTrackers[i].Username[0] = '\0'; 
+            LoginTrackers[i].AttemptCount = 0;
+            LoginTrackers[i].FirstAttemptTime = 0;
+        }
+        TrackerCount = 0; 
+
+        return NULL;
+    }
+    else
+    { 
+        LoginRateTracker* newTracker = &LoginTrackers[TrackerCount++];
+        strncpy_s(newTracker->Username, sizeof(newTracker->Username), Username, sizeof(newTracker->Username) - 1);
+        newTracker->Username[sizeof(newTracker->Username) - 1] = '\0';
+        newTracker->AttemptCount = 0;
+        newTracker->FirstAttemptTime = 0;
+        return newTracker;
+    }
+}
+
+
+int IsRateLimited(LoginRateTracker* tracker) 
+{
+    time_t currentTime = time(NULL);
+
+    if (currentTime - tracker->FirstAttemptTime >= 1) 
+    {
+        tracker->AttemptCount = 0;
+        tracker->FirstAttemptTime = currentTime;
+    }
+
+    if (tracker->AttemptCount >= MAX_ATTEMPTS_PER_SECOND) {
+        return true;
+    }
+
+    tracker->AttemptCount++;
+    return false;
+}
+
 
 NTSTATUS WINAPI
 SafeStorageHandleLogin(
@@ -260,6 +277,22 @@ SafeStorageHandleLogin(
     uint16_t PasswordLength
 )
 {
+    if (AppState.LoggedUser != NULL)
+    {
+        printf_s("User %s is logged in already. Logout is needed to perform this action.\n", AppState.LoggedUser);
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    LoginRateTracker* tracker = FindOrCreateTracker(Username);
+
+    if (!tracker) {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    if (IsRateLimited(tracker)) {
+        printf("Rate limit exceeded: Too many login attempts. Please try again later.\n");
+        return STATUS_UNSUCCESSFUL;
+    }
 
     if (!(ValidCredentials(Username, UsernameLength, Password, PasswordLength) && usernameExists(Username)))
     {
@@ -278,19 +311,19 @@ SafeStorageHandleLogin(
 
     if (VerifyPassword((const BYTE*)Password, (DWORD)PasswordLength, retrievedHash, retrievedHashLen))
     {
-        printf("SUCCESS!!\n");
+        printf("Passwords matched!\n");
         if (LoginUser(Username, UsernameLength) == FAIL)
         {
+            printf("User login failed.\n");
             return STATUS_UNSUCCESSFUL;
         }
     }
     else
     {
-        printf("FAILED!!\n");
+        printf("Passwords do not match!!\n");
+        return STATUS_UNSUCCESSFUL;
     }
    
-    printf("%s\n",  LoggedUser);
-
     return STATUS_SUCCESS;
 }
 
@@ -300,9 +333,17 @@ SafeStorageHandleLogout(
     VOID
 )
 {
-    /* The function is not implemented. It is your responsibility. */
+    if(AppState.LoggedUser == NULL)
+    {
+        printf("Not logged in!\n");
+        return STATUS_UNSUCCESSFUL;
+    }
 
-    return STATUS_NOT_IMPLEMENTED;
+    AppState.LoggedUser = NULL;
+
+    free(AppState.LoggedUser);
+
+    return STATUS_SUCCESS;
 }
 
 
