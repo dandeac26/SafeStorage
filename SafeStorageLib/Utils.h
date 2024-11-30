@@ -10,19 +10,13 @@
 #define MD5LEN  16
 #define HASH_SIZE (MD5LEN * 2 + 1)
 
-// Function to sanitize username
-//int SanitizedUsername(const char* username, uint16_t length);
-//
-//// Function to sanitize password
-//int SanitizedPassword(const char* password, uint16_t length);
+int SanitizeFilePath3(const TCHAR* filepath, size_t length, const TCHAR* basePath);
 
-// Function to sanitize file path
-int SanitizeFilePath(const char* filepath, uint16_t length, LPCSTR appdir);
+int SanitizeFilePath2(const TCHAR* filepath, size_t length);
 
-// Function for Encryption
+int SanitizeFilePath(const char* filepath, size_t length, LPCSTR appdir);
+
 DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* hashlen);
-
-// Function for Decryption
 
 DWORD VerifyPassword(const BYTE* password, DWORD length, char* hash, DWORD hashlen);
 
@@ -32,7 +26,11 @@ int ValidCredentials(const char* Username, uint16_t UsernameLength, const char* 
 
 int RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHashLen);
 
+int createUsersDirectory(VOID);
+void displayExitMSG(VOID);
+int createUsersDatabase(VOID);
 
+int createNewUserDirectory(const char* Username, uint16_t UsernameLength);
 
-
+int buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength, TCHAR* UserDirPath);
 #endif // !_UTILS_H_
