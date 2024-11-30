@@ -4,79 +4,14 @@ TCHAR g_AppDir[MAX_PATH];
 DWORD g_AppDirBuffSize;
 HANDLE g_hFileUsersDB;
 
-static char* LoggedUser = NULL;
-
-int createUsersDirectory(VOID) 
+typedef struct APP_STATE_STRUCT
 {
-    TCHAR dirPath[MAX_PATH];
-    _tcscpy_s(dirPath, MAX_PATH, g_AppDir);
+    char* LoggedUser;
+    TCHAR* CurrentUserDirectory;
+}APP_STATE;
 
-    if (PathAppend(dirPath, _T("users")) == 0)
-    {
-        printf("Error: failed to append users dir to APPDIR.\n");
-        return FAIL;
-    }
+static APP_STATE AppState;
 
-    DWORD attributes = GetFileAttributes(dirPath);
-
-    if (attributes == INVALID_FILE_ATTRIBUTES)
-    {
-        if (!CreateDirectory((LPCWSTR)dirPath, NULL))
-        {
-            printf("CreateDirectory failed (%d)\n", GetLastError());
-            return FAIL;
-        }
-        else return SUCCESS;
-    }
-   
-    if (attributes & FILE_ATTRIBUTE_DIRECTORY) 
-    {
-        //printf("Directory exists.\n");
-        return SUCCESS;
-    }
-
-    printf("Path exists, but it's not a directory.\n");
-    return FAIL;
-}
-
-
-int createUsersDatabase(VOID) 
-{
-    const TCHAR* fileName = _T("users.txt");
-
-    // check if file exists
-    DWORD fileAttributes = GetFileAttributes(fileName);
-    if (fileAttributes != INVALID_FILE_ATTRIBUTES &&
-        !(fileAttributes & FILE_ATTRIBUTE_DIRECTORY)) 
-    {
-        return SUCCESS; 
-    }
-
-    // if doesn't exist, create it
-    g_hFileUsersDB = CreateFile(
-        fileName,                  
-        GENERIC_WRITE | GENERIC_READ,             
-        0,                          
-        NULL,                       
-        CREATE_NEW,                
-        FILE_ATTRIBUTE_NORMAL,      
-        NULL                        
-    );
-
-    // Check if the file was created successfully
-    if (g_hFileUsersDB == INVALID_HANDLE_VALUE) {
-        printf("Error creating file: (%d)",GetLastError());
-        return FAIL;
-    }
-    return SUCCESS;
-}
-
-
-void displayExitMSG(VOID) 
-{
-    printf("\nPress Enter to exit...");
-    getchar();
-}
 
 NTSTATUS WINAPI SafeStorageInit(VOID)
 {
@@ -90,7 +25,7 @@ NTSTATUS WINAPI SafeStorageInit(VOID)
     }
 
     // check if /users subdir exists, if not create it
-    if (createUsersDirectory()== FAIL)
+    if (createUsersDirectory() == FAIL)
     {
         displayExitMSG();
         return STATUS_UNSUCCESSFUL;
@@ -101,6 +36,9 @@ NTSTATUS WINAPI SafeStorageInit(VOID)
         displayExitMSG();
         return STATUS_UNSUCCESSFUL;
     }
+
+    AppState.LoggedUser = NULL;
+    AppState.CurrentUserDirectory = NULL;
 
     return STATUS_SUCCESS;
 }
@@ -113,8 +51,16 @@ VOID WINAPI SafeStorageDeinit(VOID)
         CloseHandle(g_hFileUsersDB);  // Close the handle to the file
         g_hFileUsersDB = INVALID_HANDLE_VALUE; // Set handle to an invalid value after closing
     }
-    /* The function is not implemented. It is your responsibility. */
-    /* Here you can clean up any global objects you have created earlier. */
+
+    if (AppState.LoggedUser != NULL)
+    {
+        free(AppState.LoggedUser);
+    }
+
+    if (AppState.CurrentUserDirectory != NULL)
+    {
+        free(AppState.CurrentUserDirectory);
+    }
 
     return;
 }
@@ -151,7 +97,7 @@ int usernameExists(const char* username)
     lineBuffer[511] = '\0';
     char* lineEnd = NULL;
 
-    while (TRUE) 
+    while (TRUE)
     {
         if (!ReadFile(FileUsersDB, buffer, sizeof(buffer) - 1, &bytesRead, NULL)) {
             printf("ReadFile failed: %d\n", GetLastError());
@@ -167,7 +113,7 @@ int usernameExists(const char* username)
         strncat(lineBuffer, buffer, sizeof(lineBuffer) - strlen(lineBuffer) - 1);
 
         while ((lineEnd = strchr(lineBuffer, '\n')) != NULL) {
-            *lineEnd = '\0'; 
+            *lineEnd = '\0';
 
             char* fileUser = strtok(lineBuffer, ":");
             char* encryptedPassword = strtok(NULL, ":");
@@ -209,6 +155,11 @@ SafeStorageHandleRegister(
     uint16_t PasswordLength
 )
 {
+    if (AppState.LoggedUser != NULL)
+    {
+        printf_s("User %s is logged in already. Logout is needed to perform this action.\n", AppState.LoggedUser);
+        return STATUS_UNSUCCESSFUL;
+    }
 
     if (!ValidCredentials(Username, UsernameLength, Password, PasswordLength))
     {
@@ -235,22 +186,88 @@ SafeStorageHandleRegister(
 
     InsertUser(Username, hash);
 
+    createNewUserDirectory(Username, UsernameLength);
+
     return STATUS_SUCCESS;
 }
 
-NTSTATUS WINAPI LoginUser(const char* Username, uint16_t UsernameLength)
+int LoginUser(const char* Username, uint16_t UsernameLength)
 {
+    AppState.CurrentUserDirectory = (TCHAR*)calloc(sizeof(TCHAR), MAX_PATH);
+
+    if (buildUserPathAndCheckIfExists(Username, UsernameLength, AppState.CurrentUserDirectory) == FAIL)
+    {
+        printf("User directory no longer exists.\n");
+        return FAIL;
+    }
+
+    printf("current user dir : ");
+    _tprintf(AppState.CurrentUserDirectory);
+    printf("\n");
+
+    AppState.LoggedUser = calloc(sizeof(char), (UsernameLength + 1));
+    strncpy_s(AppState.LoggedUser, UsernameLength + 1, Username, UsernameLength);
 
 
-    LoggedUser = calloc(sizeof(char), (UsernameLength + 1));
-    strncpy_s(LoggedUser, UsernameLength + 1, Username, UsernameLength);
-
-
-    /*UNREFERENCED_PARAMETER(Username);
-    UNREFERENCED_PARAMETER(UsernameLength);
-*/
-    return STATUS_NOT_IMPLEMENTED;
+    return SUCCESS;
 }
+
+
+LoginRateTracker LoginTrackers[TRACKER_CAPACITY];
+size_t TrackerCount = 0;
+
+
+LoginRateTracker* FindOrCreateTracker(const char* Username)
+{
+    for (size_t i = 0; i < TrackerCount; i++)
+    {
+        if (strncmp(LoginTrackers[i].Username, Username, strlen(Username)) == 0)
+        {
+            return &LoginTrackers[i];
+        }
+    }
+
+    if (TrackerCount >= TRACKER_CAPACITY) {
+        printf("Tracker storage is full! resetting all trackers.\n");
+        for (size_t i = 0; i < TrackerCount; i++) {
+            LoginTrackers[i].Username[0] = '\0';
+            LoginTrackers[i].AttemptCount = 0;
+            LoginTrackers[i].FirstAttemptTime = 0;
+        }
+        TrackerCount = 0;
+
+        return NULL;
+    }
+    else
+    {
+        LoginRateTracker* newTracker = &LoginTrackers[TrackerCount++];
+        strncpy_s(newTracker->Username, sizeof(newTracker->Username), Username, sizeof(newTracker->Username) - 1);
+        newTracker->Username[sizeof(newTracker->Username) - 1] = '\0';
+        newTracker->AttemptCount = 0;
+        newTracker->FirstAttemptTime = 0;
+        return newTracker;
+    }
+}
+
+
+int IsRateLimited(LoginRateTracker* tracker)
+{
+    time_t currentTime = time(NULL);
+
+    if (currentTime - tracker->FirstAttemptTime >= 1)
+    {
+        tracker->AttemptCount = 0;
+        tracker->FirstAttemptTime = currentTime;
+    }
+
+    if (tracker->AttemptCount >= MAX_ATTEMPTS_PER_SECOND) {
+        return TRUE;
+    }
+
+    tracker->AttemptCount++;
+    return FALSE;
+}
+
 
 NTSTATUS WINAPI
 SafeStorageHandleLogin(
@@ -260,6 +277,22 @@ SafeStorageHandleLogin(
     uint16_t PasswordLength
 )
 {
+    if (AppState.LoggedUser != NULL)
+    {
+        printf_s("User %s is logged in already. Logout is needed to perform this action.\n", AppState.LoggedUser);
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    LoginRateTracker* tracker = FindOrCreateTracker(Username);
+
+    if (!tracker) {
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    if (IsRateLimited(tracker)) {
+        printf("Rate limit exceeded: Too many login attempts. Please try again later.\n");
+        return STATUS_UNSUCCESSFUL;
+    }
 
     if (!(ValidCredentials(Username, UsernameLength, Password, PasswordLength) && usernameExists(Username)))
     {
@@ -278,18 +311,18 @@ SafeStorageHandleLogin(
 
     if (VerifyPassword((const BYTE*)Password, (DWORD)PasswordLength, retrievedHash, retrievedHashLen))
     {
-        printf("SUCCESS!!\n");
+        printf("Passwords matched!\n");
         if (LoginUser(Username, UsernameLength) == FAIL)
         {
+            printf("User login failed.\n");
             return STATUS_UNSUCCESSFUL;
         }
     }
     else
     {
-        printf("FAILED!!\n");
+        printf("Passwords do not match!!\n");
+        return STATUS_UNSUCCESSFUL;
     }
-   
-    printf("%s\n",  LoggedUser);
 
     return STATUS_SUCCESS;
 }
@@ -300,10 +333,159 @@ SafeStorageHandleLogout(
     VOID
 )
 {
-    /* The function is not implemented. It is your responsibility. */
+    if (AppState.LoggedUser == NULL)
+    {
+        printf("Not logged in!\n");
+        return STATUS_UNSUCCESSFUL;
+    }
 
-    return STATUS_NOT_IMPLEMENTED;
+    free(AppState.LoggedUser);
+    free(AppState.CurrentUserDirectory);
+
+    AppState.LoggedUser = NULL;
+    AppState.CurrentUserDirectory = NULL;
+
+    return STATUS_SUCCESS;
 }
+
+
+//CRITICAL_SECTION g_csRetrieveFileWrite;
+
+//VOID CALLBACK RetrieveProcessFileChunk(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
+//    UNREFERENCED_PARAMETER(Work);
+//    UNREFERENCED_PARAMETER(Instance);
+//
+//    PFILE_CHUNK_INFO pChunkInfo = (PFILE_CHUNK_INFO)Context;
+//    DWORD bytesRead = 0, bytesWritten = 0;
+//    BYTE* buffer = (BYTE*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, pChunkInfo->ChunkSize);
+//
+//    if (buffer == NULL) {
+//        // Handle memory allocation failure.
+//        return;
+//    }
+//
+//    SetFilePointerEx(pChunkInfo->hSourceFile, pChunkInfo->Offset, NULL, FILE_BEGIN);
+//
+//    if (!ReadFile(pChunkInfo->hSourceFile, buffer, pChunkInfo->ChunkSize, &bytesRead, NULL)) {
+//        // Handle read error.
+//        HeapFree(GetProcessHeap(), 0, buffer);
+//        return;
+//    }
+//
+//    //EnterCriticalSection(&g_csRetrieveFileWrite);
+//
+//    //SetFilePointerEx(pChunkInfo->hDestinationFile, pChunkInfo->Offset, NULL, FILE_BEGIN);
+//
+//    WriteFile(pChunkInfo->hDestinationFile, buffer, bytesRead, &bytesWritten, NULL);
+//
+//    //LeaveCriticalSection(&g_csRetrieveFileWrite);
+//
+//    HeapFree(GetProcessHeap(), 0, buffer);
+//}
+typedef struct _FILE_CHUNK_INFO {
+    HANDLE hSourceFile;
+    HANDLE hDestinationFile;
+    LARGE_INTEGER Offset;
+    DWORD ChunkSize;
+    DWORD ActualBytesRead;
+    PTP_WORK Work;
+} FILE_CHUNK_INFO, * PFILE_CHUNK_INFO;
+
+CRITICAL_SECTION g_csFileWrite;
+
+
+VOID CALLBACK ProcessFileChunk(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
+    UNREFERENCED_PARAMETER(Work);
+    UNREFERENCED_PARAMETER(Instance);
+    EnterCriticalSection(&g_csFileWrite);
+    PFILE_CHUNK_INFO pChunkInfo = (PFILE_CHUNK_INFO)Context;
+    DWORD bytesRead = 0, bytesWritten = 0;
+    BYTE* buffer = (BYTE*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, pChunkInfo->ChunkSize);
+
+    if (buffer == NULL) {
+        printf("mem loc failure\n");
+        // Handle memory allocation failure.
+        return;
+    }
+
+    SetFilePointerEx(pChunkInfo->hSourceFile, pChunkInfo->Offset, NULL, FILE_BEGIN);
+
+    if (!ReadFile(pChunkInfo->hSourceFile, buffer, pChunkInfo->ChunkSize, &bytesRead, NULL)) {
+        // Handle read error.
+        printf("error readfile thread\n");
+        HeapFree(GetProcessHeap(), 0, buffer);
+        return;
+    }
+
+
+
+    SetFilePointerEx(pChunkInfo->hDestinationFile, pChunkInfo->Offset, NULL, FILE_BEGIN);
+
+    WriteFile(pChunkInfo->hDestinationFile, buffer, bytesRead, &bytesWritten, NULL);
+
+   
+
+    HeapFree(GetProcessHeap(), 0, buffer);
+
+    LeaveCriticalSection(&g_csFileWrite);
+}
+
+//VOID CALLBACK ProcessFileChunk(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
+//    UNREFERENCED_PARAMETER(Work);
+//    UNREFERENCED_PARAMETER(Instance);
+//
+//    PFILE_CHUNK_INFO pChunkInfo = (PFILE_CHUNK_INFO)Context;
+//    DWORD totalBytesRead = 0, totalBytesWritten = 0;
+//    BYTE* buffer = (BYTE*)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, pChunkInfo->ChunkSize);
+//
+//    if (!buffer) {
+//        printf("Memory allocation failed.\n");
+//        return;
+//    }
+//
+//    LARGE_INTEGER sourceOffset = pChunkInfo->Offset;
+//    if (!SetFilePointerEx(pChunkInfo->hSourceFile, sourceOffset, NULL, FILE_BEGIN)) {
+//        printf("SetFilePointerEx failed for source.\n");
+//        HeapFree(GetProcessHeap(), 0, buffer);
+//        return;
+//    }
+//
+//    while (totalBytesRead < pChunkInfo->ChunkSize) {
+//        DWORD bytesRead = 0;
+//        if (!ReadFile(pChunkInfo->hSourceFile, buffer + totalBytesRead, pChunkInfo->ChunkSize - totalBytesRead, &bytesRead, NULL)) {
+//            printf("ReadFile failed.\n");
+//            HeapFree(GetProcessHeap(), 0, buffer);
+//            return;
+//        }
+//        totalBytesRead += bytesRead;
+//        if (bytesRead == 0) break;  // End of file
+//    }
+//
+//    EnterCriticalSection(&g_csFileWrite);
+//
+//    LARGE_INTEGER destOffset = pChunkInfo->Offset;
+//    if (!SetFilePointerEx(pChunkInfo->hDestinationFile, destOffset, NULL, FILE_BEGIN)) {
+//        printf("SetFilePointerEx failed for destination.\n");
+//        LeaveCriticalSection(&g_csFileWrite);
+//        HeapFree(GetProcessHeap(), 0, buffer);
+//        return;
+//    }
+//
+//    while (totalBytesWritten < totalBytesRead) {
+//        DWORD bytesWritten = 0;
+//        if (!WriteFile(pChunkInfo->hDestinationFile, buffer + totalBytesWritten, totalBytesRead - totalBytesWritten, &bytesWritten, NULL)) {
+//            printf("WriteFile failed.\n");
+//            LeaveCriticalSection(&g_csFileWrite);
+//            HeapFree(GetProcessHeap(), 0, buffer);
+//            return;
+//        }
+//        totalBytesWritten += bytesWritten;
+//    }
+//
+//    LeaveCriticalSection(&g_csFileWrite);
+//
+//    HeapFree(GetProcessHeap(), 0, buffer);
+//}
 
 
 NTSTATUS WINAPI
@@ -314,16 +496,191 @@ SafeStorageHandleStore(
     uint16_t SourceFilePathLength
 )
 {
-    /* The function is not implemented. It is your responsibility. */
-    /* After you implement the function, you can remove UNREFERENCED_PARAMETER(x). */
-    /* This is just to prevent a compilation warning that the parameter is unused. */
 
-    UNREFERENCED_PARAMETER(SubmissionName);
-    UNREFERENCED_PARAMETER(SubmissionNameLength);
-    UNREFERENCED_PARAMETER(SourceFilePath);
+
+    if (AppState.LoggedUser == NULL)
+    {
+        printf("You must be logged in before performing this command!\n");
+        return STATUS_UNSUCCESSFUL;
+    }
+
+
+    if (!SubmissionName || !SourceFilePath)
+    {
+        printf("invalid param\n");
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    // Construct destination file path.
+    TCHAR* destPath;
+    destPath = (TCHAR*)calloc(sizeof(TCHAR), MAX_PATH);
+
+    if (_tcsncpy_s(destPath, MAX_PATH, AppState.CurrentUserDirectory, _tcslen(AppState.CurrentUserDirectory)) != 0)
+    {
+        printf("Failed to put current user dir in destPath");
+        return STATUS_INTERNAL_ERROR;
+    }
+
+
+    TCHAR* submissionName = (TCHAR*)calloc(SubmissionNameLength, sizeof(TCHAR));
+    uint16_t j;
+    for (j = 0; j < SubmissionNameLength; j++)
+    {
+        submissionName[j] = SubmissionName[j];
+    }
+    submissionName[j] = '\0';
+
+
+
+    if (PathAppend(destPath, submissionName) == 0)
+    {
+        printf("Error: failed to append submission name.\n");
+        return STATUS_INTERNAL_ERROR;
+    }
+
+    if (!SanitizeFilePath3(destPath, _tcslen(destPath), AppState.CurrentUserDirectory))
+    {
+        printf("Fail destPath sanitization\n");
+        return FAIL;
+    }
+
+    //TCHAR tchar_SourceFilePath[MAX_PATH];
+    //uint16_t l;
+    //for (l = 0; l < strlen(SourceFilePath); l++)
+    //{
+    //    tchar_SourceFilePath[l] = SourceFilePath[l];
+    //}
+    //tchar_SourceFilePath[l] = '\0';
+
+
+
+    // Open source and destination files.
+    HANDLE hSource = CreateFileA(SourceFilePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hSource == INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(hSource);
+        printf("Couldn't open source file\n");
+        return STATUS_INTERNAL_ERROR;
+    }
+
+
+    char chr_destPath[MAX_PATH];
+    size_t l;
+    for (l = 0; l < _tcslen(destPath); l++)
+    {
+        chr_destPath[l] = (char)destPath[l];
+    }
+    chr_destPath[l] = '\0';
+
+
+    HANDLE testExisting = CreateFileA(chr_destPath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (testExisting != INVALID_HANDLE_VALUE)
+    {
+        CloseHandle(testExisting);
+        CloseHandle(hSource);
+        printf("A file with the same submission name already exists!\n");
+        return STATUS_UNSUCCESSFUL;
+    }
+    CloseHandle(testExisting);
+
+    HANDLE hDest = CreateFileA(chr_destPath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL); //
+    if (hDest == INVALID_HANDLE_VALUE)
+    {
+        printf("couldn't open destination destPath\n");
+        CloseHandle(hSource);
+        CloseHandle(hDest);
+        return STATUS_ACCESS_DENIED;
+    }
+
+
+
+    LARGE_INTEGER fileSize;
+    if (!GetFileSizeEx(hSource, &fileSize)) {
+        CloseHandle(hSource);
+        CloseHandle(hDest);
+        printf("couldn't get file size\n");
+        return STATUS_INTERNAL_ERROR;
+    }
+
+    // Ensure file size is within limit.
+    if (fileSize.QuadPart > 8LL * 1024 * 1024 * 1024) {
+        CloseHandle(hSource);
+        CloseHandle(hDest);
+        printf("File is too large! 8Gb is maximum!\n");
+        return STATUS_FILE_TOO_LARGE;
+    }
+
+
+    // Initialize thread pool and allocate chunks.
+    PTP_POOL pool = CreateThreadpool(NULL);
+    if (pool == NULL) {
+        printf("internal Error create threads pool\n");
+        CloseHandle(hSource);
+        CloseHandle(hDest);
+        return STATUS_INTERNAL_ERROR;
+    }
+
+    SetThreadpoolThreadMaximum(pool, 4);
+    SetThreadpoolThreadMinimum(pool, 4);
+
+    TP_CALLBACK_ENVIRON callbackEnv;
+    InitializeThreadpoolEnvironment(&callbackEnv);
+    SetThreadpoolCallbackPool(&callbackEnv, pool);
+
+    PTP_CLEANUP_GROUP cleanupGroup = CreateThreadpoolCleanupGroup();
+    if (cleanupGroup == NULL) {
+        CloseThreadpool(pool);
+        CloseHandle(hSource);
+        CloseHandle(hDest);
+        printf("internal Error threads\n");
+        return STATUS_INTERNAL_ERROR;
+    }
+
+    InitializeCriticalSection(&g_csFileWrite);
+
+    SetThreadpoolCallbackCleanupGroup(&callbackEnv, cleanupGroup, NULL);
+
+    DWORD chunkSize = 64 * 1024; // 64 KB
+    LARGE_INTEGER offset = { 0 };
+    DWORD chunks = (DWORD)(fileSize.QuadPart / chunkSize) + (fileSize.QuadPart % chunkSize ? 1 : 0);
+
+    for (DWORD i = 0; i < chunks; ++i) {
+        PFILE_CHUNK_INFO chunkInfo = (PFILE_CHUNK_INFO)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(FILE_CHUNK_INFO));
+        if (!chunkInfo) {
+            break;
+        }
+
+        chunkInfo->hSourceFile = hSource;
+        chunkInfo->hDestinationFile = hDest;
+        chunkInfo->Offset.QuadPart = offset.QuadPart;
+        chunkInfo->ChunkSize = (i == chunks - 1 && fileSize.QuadPart % chunkSize) ? fileSize.QuadPart % chunkSize : chunkSize;
+
+        PTP_WORK work = CreateThreadpoolWork(ProcessFileChunk, chunkInfo, &callbackEnv);
+        if (!work) {
+            HeapFree(GetProcessHeap(), 0, chunkInfo);
+            break;
+        }
+
+        SubmitThreadpoolWork(work);
+        offset.QuadPart += chunkSize;
+    }
+
+    // Wait for all threads to be finished
+    CloseThreadpoolCleanupGroupMembers(cleanupGroup, FALSE, NULL);
+
+    FlushFileBuffers(hDest);
+
+    // Cleanup.
+    CloseThreadpoolCleanupGroup(cleanupGroup);
+    CloseThreadpool(pool);
+    CloseHandle(hSource);
+    CloseHandle(hDest);
+    //free(chr_destPath);
+    DeleteCriticalSection(&g_csFileWrite);
+
     UNREFERENCED_PARAMETER(SourceFilePathLength);
 
-    return STATUS_NOT_IMPLEMENTED;
+    return STATUS_SUCCESS;
 }
 
 
@@ -335,14 +692,180 @@ SafeStorageHandleRetrieve(
     uint16_t DestinationFilePathLength
 )
 {
-    /* The function is not implemented. It is your responsibility. */
-    /* After you implement the function, you can remove UNREFERENCED_PARAMETER(x). */
-    /* This is just to prevent a compilation warning that the parameter is unused. */
-
-    UNREFERENCED_PARAMETER(SubmissionName);
-    UNREFERENCED_PARAMETER(SubmissionNameLength);
-    UNREFERENCED_PARAMETER(DestinationFilePath);
     UNREFERENCED_PARAMETER(DestinationFilePathLength);
+    UNREFERENCED_PARAMETER(DestinationFilePath);
+    UNREFERENCED_PARAMETER(SubmissionNameLength);
+    UNREFERENCED_PARAMETER(SubmissionName);
 
     return STATUS_NOT_IMPLEMENTED;
+    //    if (AppState.LoggedUser == NULL)
+    //    {
+    //        printf("You must be logged in before performing this command!\n");
+    //        return STATUS_UNSUCCESSFUL;
+    //    }
+    //
+    //    if (!SubmissionName || !DestinationFilePath)
+    //    {
+    //        return STATUS_INVALID_PARAMETER;
+    //    }
+    //
+    //    // Construct destination file path.
+    //    TCHAR* sourcePath;
+    //    sourcePath = (TCHAR*)calloc(sizeof(TCHAR), MAX_PATH);
+    //
+    //    if (_tcsncpy_s(sourcePath, MAX_PATH, AppState.CurrentUserDirectory, _tcslen(AppState.CurrentUserDirectory)) != 0)
+    //    {
+    //        printf("Failed to put current user dir in sourcePath");
+    //        return STATUS_INTERNAL_ERROR;
+    //    }
+    //
+    //
+    //    TCHAR* submissionName = (TCHAR*)calloc(SubmissionNameLength, sizeof(TCHAR));
+    //    uint16_t j;
+    //    for (j = 0; j < SubmissionNameLength; j++)
+    //    {
+    //        submissionName[j] = SubmissionName[j];
+    //    }
+    //    submissionName[j] = '\0';
+    //
+    //
+    //
+    //    if (PathAppend(sourcePath, submissionName) == 0)
+    //    {
+    //        printf("Error: failed to append submission name.\n");
+    //        return STATUS_INTERNAL_ERROR;
+    //    }
+    //
+    //    if (!SanitizeFilePath3(sourcePath, _tcslen(sourcePath), AppState.CurrentUserDirectory))
+    //    {
+    //        printf("Fail sourcePath sanitization\n");
+    //        return FAIL;
+    //    }
+    //
+    //    TCHAR tchar_DestinationFilePath[MAX_PATH];
+    //    uint16_t l;
+    //    for (l = 0; l < strlen(DestinationFilePath); l++)
+    //    {
+    //        tchar_DestinationFilePath[l] = DestinationFilePath[l];
+    //    }
+    //    tchar_DestinationFilePath[l] = '\0';
+    //
+    ////tchar_DestinationFilePath
+    //
+    //    HANDLE hSubmissionSource = CreateFile(sourcePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    //    if (hSubmissionSource == INVALID_HANDLE_VALUE)
+    //    {
+    //        CloseHandle(hSubmissionSource);
+    //        printf("Couldn't open submission source file\n");
+    //        return STATUS_INTERNAL_ERROR;
+    //    }
+    //
+    //
+    //
+    //
+    //
+    //    LARGE_INTEGER fileSize;
+    //    if (!GetFileSizeEx(hSubmissionSource, &fileSize)) {
+    //        CloseHandle(hSubmissionSource);
+    //        return STATUS_INTERNAL_ERROR;
+    //    }
+    //
+    //    // Ensure file size is within limit.
+    //    if (fileSize.QuadPart > 8LL * 1024 * 1024 * 1024) {
+    //        CloseHandle(hSubmissionSource);
+    //
+    //        printf("File is too large! 8Gb is maximum!\n");
+    //        return STATUS_FILE_TOO_LARGE;
+    //    }
+    //
+    //
+    // /*   HANDLE testExisting = CreateFile(tchar_DestinationFilePath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING, NULL);
+    //
+    //    if (testExisting != INVALID_HANDLE_VALUE)
+    //    {
+    //        CloseHandle(hSubmissionSource);
+    //        CloseHandle(testExisting);
+    //        printf("A file with same destination path exists!\n");
+    //        return STATUS_UNSUCCESSFUL;
+    //    }
+    //    CloseHandle(testExisting);*/
+    //
+    //
+    //    HANDLE hDestinationPath = CreateFile(tchar_DestinationFilePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_FLAG_NO_BUFFERING, NULL);
+    //    if (hDestinationPath == INVALID_HANDLE_VALUE)
+    //    {
+    //        printf("Couldn't open destination path\n");
+    //        CloseHandle(hSubmissionSource);
+    //        CloseHandle(hDestinationPath);
+    //        return STATUS_ACCESS_DENIED;
+    //    }
+    //
+    //
+    //
+    //
+    //    // Initialize thread pool and allocate chunks.
+    //    PTP_POOL pool2 = CreateThreadpool(NULL);
+    //    if (pool2 == NULL) {
+    //        CloseHandle(hSubmissionSource);
+    //        CloseHandle(hDestinationPath);
+    //        return STATUS_INTERNAL_ERROR;
+    //    }
+    //
+    //    SetThreadpoolThreadMaximum(pool2, 4);
+    //    SetThreadpoolThreadMinimum(pool2, 4);
+    //
+    //    TP_CALLBACK_ENVIRON callbackEnv;
+    //    InitializeThreadpoolEnvironment(&callbackEnv);
+    //    SetThreadpoolCallbackPool(&callbackEnv, pool2);
+    //
+    //    PTP_CLEANUP_GROUP cleanupGroup = CreateThreadpoolCleanupGroup();
+    //    if (cleanupGroup == NULL) {
+    //        CloseThreadpool(pool2);
+    //        CloseHandle(hSubmissionSource);
+    //        CloseHandle(hDestinationPath);
+    //        return STATUS_INTERNAL_ERROR;
+    //    }
+    //
+    //    //InitializeCriticalSection(&g_csRetrieveFileWrite);
+    //
+    //    SetThreadpoolCallbackCleanupGroup(&callbackEnv, cleanupGroup, NULL);
+    //
+    //    DWORD chunkSize = 64 * 1024; // 64 KB
+    //    LARGE_INTEGER offset = { 0 };
+    //    DWORD chunks = (DWORD)(fileSize.QuadPart / chunkSize) + (fileSize.QuadPart % chunkSize ? 1 : 0);
+    //
+    //    for (DWORD i = 0; i < chunks; ++i) {
+    //        PFILE_CHUNK_INFO chunkInfo = (PFILE_CHUNK_INFO)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(FILE_CHUNK_INFO));
+    //        if (!chunkInfo) {
+    //            break;
+    //        }
+    //
+    //        chunkInfo->hSourceFile = hSubmissionSource ;
+    //        chunkInfo->hDestinationFile = hDestinationPath;
+    //        chunkInfo->Offset.QuadPart = offset.QuadPart;
+    //        chunkInfo->ChunkSize = (i == chunks - 1 && fileSize.QuadPart % chunkSize) ? fileSize.QuadPart % chunkSize : chunkSize;
+    //
+    //        PTP_WORK work = CreateThreadpoolWork(RetrieveProcessFileChunk, chunkInfo, &callbackEnv);
+    //        if (!work) {
+    //            HeapFree(GetProcessHeap(), 0, chunkInfo);
+    //            break;
+    //        }
+    //
+    //        SubmitThreadpoolWork(work);
+    //        offset.QuadPart += chunkSize;
+    //    }
+    //
+    //    // Wait for all threads to be finished
+    //    CloseThreadpoolCleanupGroupMembers(cleanupGroup, FALSE, NULL);
+    //
+    //    //FlushFileBuffers(hDestinationPath);
+    //
+    //    // Cleanup.
+    //    CloseThreadpoolCleanupGroup(cleanupGroup);
+    //    CloseThreadpool(pool2);
+    //    CloseHandle(hSubmissionSource);
+    //    CloseHandle(hDestinationPath);
+    //    free(sourcePath);
+    //    //DeleteCriticalSection(&g_csRetrieveFileWrite);
+    //    return STATUS_SUCCESS;
 }
