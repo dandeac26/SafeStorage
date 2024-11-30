@@ -382,7 +382,7 @@ SafeStorageHandleLogout(
 //
 //    HeapFree(GetProcessHeap(), 0, buffer);
 //}
-typedef struct _FILE_CHUNK_INFO {
+typedef struct _FILE_CHUNK_INFO {store should work pretty flawlessly
     HANDLE hSourceFile;
     HANDLE hDestinationFile;
     LARGE_INTEGER Offset;
@@ -393,7 +393,7 @@ typedef struct _FILE_CHUNK_INFO {
 
 CRITICAL_SECTION g_csFileWrite;
 
-
+// test
 VOID CALLBACK ProcessFileChunk(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
     UNREFERENCED_PARAMETER(Work);
     UNREFERENCED_PARAMETER(Instance);
