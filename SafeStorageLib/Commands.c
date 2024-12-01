@@ -623,7 +623,7 @@ SafeStorageHandleRetrieve(
     }
     chr_sourcePath[l] = '\0';
 
-    // this causes tests to fail, but its best practice i would think
+    // this causes tests to fail, but its best practice i would think to keep it, so if this is uncommented tests fail.
 
     /*HANDLE testExisting = CreateFileA(DestinationFilePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (testExisting != INVALID_HANDLE_VALUE)
