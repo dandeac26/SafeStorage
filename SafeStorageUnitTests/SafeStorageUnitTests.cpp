@@ -40,6 +40,7 @@ TEST_CLASS(UserActivityTest)
                                            password,
                                            static_cast<uint16_t>(strlen(password)));
         Assert::IsTrue(NT_SUCCESS(status));
+        wprintf(L"Status: 0x%08x\n", status);
 
         //
         // As per requirements.
