@@ -527,7 +527,7 @@ BOOL RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHas
     while (TRUE)
     {
         if (!ReadFile(FileUsersDB, buffer, sizeof(buffer) - 1, &bytesRead, NULL)) {
-            printf("ReadFile failed: %d\n", GetLastError());
+            printf_s("ReadFile failed: %d\n", GetLastError());
             CloseHandle(FileUsersDB);
             return result;
         }
