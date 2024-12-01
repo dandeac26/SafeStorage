@@ -75,7 +75,7 @@ BOOL createUsersDirectory(VOID)
 }
 
 
-BOOL createNewUserDirectory(const char* Username, uint16_t UsernameLength)
+BOOL createNewUserDirectory(_In_ const char* Username, _In_ uint16_t UsernameLength)
 {
     TCHAR dirPath[MAX_PATH];
     _tcscpy_s(dirPath, MAX_PATH, g_AppDir);
@@ -135,8 +135,13 @@ BOOL createNewUserDirectory(const char* Username, uint16_t UsernameLength)
 }
 
 
-BOOL buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength, TCHAR* UserDirPath)
+_Success_(return) BOOL buildUserPathAndCheckIfExists(_In_ const char* Username, _In_ uint16_t UsernameLength, _Out_ TCHAR* UserDirPath)
 {
+    if (UserDirPath == NULL) {
+        printf("Error: UserDirPath is NULL!\n");
+        return FAIL;
+    }
+
     TCHAR dirPath[MAX_PATH];
     _tcscpy_s(dirPath, MAX_PATH, g_AppDir);
 
@@ -160,7 +165,7 @@ BOOL buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength
         return FAIL;
     }
 
-    if (!SanitizeFilePath_Normalization(dirPath, _tcslen(dirPath), UserDirPath))
+    if (!SanitizeFilePath_UserDir(dirPath, _tcslen(dirPath)))
     {
         printf("sanitize fail\n");
         return FAIL;
@@ -181,7 +186,12 @@ BOOL buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength
         return FAIL;
     }
 
-    if (_tcsncpy_s(UserDirPath, MAX_PATH, dirPath, _tcslen(dirPath)) != 0) {
+    if (_tcslen(dirPath) >= MAX_PATH)
+    {
+        printf("Resulting file path too long!\n");
+        return FAIL;
+    }
+    if (_tcsncpy_s(UserDirPath, MAX_PATH, dirPath, _tcslen(dirPath)) != 0) { // was last param:
         return FAIL;
     }
 
@@ -189,14 +199,14 @@ BOOL buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength
 }
 
 
-int IsSpecialCharacter(char ch)
+int IsSpecialCharacter(_In_ char ch)
 {
     const char* specialChars = "!@#$%^&";
     return strchr(specialChars, ch) != NULL;
 }
 
 
-int SanitizedUsername(const char* username, uint16_t length)
+int SanitizedUsername(_In_ const char* username, _In_ uint16_t length)
 {
 
     if (length < 5 || length > 10)
@@ -215,7 +225,7 @@ int SanitizedUsername(const char* username, uint16_t length)
 }
 
 
-int SanitizedPassword(const char* password, uint16_t length)
+int SanitizedPassword(_In_ const char* password, _In_ uint16_t length)
 {
     if (length < 5 || length > 25) // upper limit - Could cause tests to fail as it is not in the requirements
     {
@@ -256,7 +266,7 @@ int SanitizedPassword(const char* password, uint16_t length)
 }
 
 
-BOOL SanitizeFilePath_UserDir(const TCHAR* filepath, size_t length)
+BOOL SanitizeFilePath_UserDir(_In_ const TCHAR* filepath, _In_ size_t length)
 {
     if (length == 0 || filepath == NULL)
     {
@@ -307,7 +317,7 @@ BOOL SanitizeFilePath_UserDir(const TCHAR* filepath, size_t length)
 }
 
 
-BOOL SanitizeFilePath_Normalization(const TCHAR* filepath, size_t length, const TCHAR* basePath) // with normalization
+BOOL SanitizeFilePath_Normalization(_In_ const TCHAR* filepath, _In_ size_t length, _In_ const TCHAR* basePath) // with normalization
 {
     if (length == 0 || filepath == NULL || basePath == NULL)
     {
@@ -338,7 +348,7 @@ BOOL SanitizeFilePath_Normalization(const TCHAR* filepath, size_t length, const 
     return TRUE;
 }
 
-DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* hashlen)
+DWORD EncryptPassword(_In_ const BYTE* password, _In_ DWORD length, _Out_opt_ char* hash, _Out_opt_ DWORD* hashlen)
 {
     DWORD dwStatus = 0;
     HCRYPTPROV hProv = 0;
@@ -346,6 +356,16 @@ DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* has
     BYTE rgbHash[MD5LEN];
     DWORD cbHash = 0;
     CHAR rgbDigits[] = "0123456789abcdef";
+
+    hashlen = malloc(sizeof(DWORD));  // Allocate memory for hashlen
+    if (hashlen == NULL) {
+        // Handle allocation failure
+        printf("Memory allocation failed.\n");
+        dwStatus = GetLastError();
+        return dwStatus; // or appropriate error handling
+    }
+
+    *hashlen = 0;
 
 
     if (!CryptAcquireContext(&hProv,
@@ -405,7 +425,7 @@ DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* has
 }
 
 
-DWORD VerifyPassword(const BYTE* password, DWORD length, char* hash, DWORD hashlen)
+DWORD VerifyPassword(_In_ const BYTE* password, _In_ DWORD length, _In_ char* hash, _In_ DWORD hashlen)
 {
     if (password == NULL || hash == NULL || hashlen != (HASH_SIZE - 1))
     {
@@ -428,7 +448,7 @@ DWORD VerifyPassword(const BYTE* password, DWORD length, char* hash, DWORD hashl
 }
 
 
-void InsertUser(const char* Username, const char* hash)
+void InsertUser(_In_ const char* Username, _In_ const char* hash)
 {
 
     HANDLE FileUsersDB = CreateFile(
@@ -476,7 +496,7 @@ void InsertUser(const char* Username, const char* hash)
 
 
 
-BOOL ValidCredentials(const char* Username, uint16_t UsernameLength, const char* Password, uint16_t PasswordLength)
+BOOL ValidCredentials(_In_ const char* Username, _In_ uint16_t UsernameLength, _In_ const char* Password, _In_ uint16_t PasswordLength)
 {
     if (!SanitizedUsername(Username, UsernameLength))
     {
@@ -494,9 +514,18 @@ BOOL ValidCredentials(const char* Username, uint16_t UsernameLength, const char*
 }
 
 
-BOOL RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHashLen)
+BOOL RetrieveHash(_In_ const char* Username, _Out_opt_ char* retrievedHash, _Out_opt_ DWORD* retrievedHashLen)
 {
     int result = FAIL;
+
+    *retrievedHashLen = (DWORD)malloc(sizeof(DWORD)); 
+    if (retrievedHashLen == NULL)
+    {
+        printf("Memory allocation failed.\n");
+        return result;
+    }
+
+    *retrievedHashLen = 0;
 
     HANDLE FileUsersDB = CreateFile(
         _T("users.txt"),
@@ -575,6 +604,7 @@ BOOL RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHas
     }
 
     CloseHandle(FileUsersDB);
+    
     return result;
 }
 

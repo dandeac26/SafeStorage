@@ -10,20 +10,42 @@
 #define MD5LEN  16
 #define HASH_SIZE (MD5LEN * 2 + 1)
 
-BOOL SanitizeFilePath_Normalization(const TCHAR* filepath, size_t length, const TCHAR* basePath);
+BOOL SanitizeFilePath_Normalization(
+	_In_ const TCHAR* filepath,
+	_In_ size_t length,
+	_In_ const TCHAR* basePath);
 
-BOOL SanitizeFilePath_UserDir(const TCHAR* filepath, size_t length);
 
+BOOL SanitizeFilePath_UserDir(
+	_In_ const TCHAR* filepath,
+	_In_ size_t length);
 
-DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* hashlen);
+DWORD EncryptPassword(
+	_In_ const BYTE* password,
+	_In_ DWORD length,
+	_Out_opt_ char* hash,
+	_Out_opt_ DWORD* hashlen);
 
-DWORD VerifyPassword(const BYTE* password, DWORD length, char* hash, DWORD hashlen);
+DWORD VerifyPassword(
+	_In_ const BYTE* password,
+	_In_ DWORD length,
+	_In_ char* hash,
+	_In_ DWORD hashlen);
 
-void InsertUser(const char* Username, const char* hash);
+void InsertUser(
+	_In_ const char* Username,
+	_In_ const char* hash);
 
-BOOL ValidCredentials(const char* Username, uint16_t UsernameLength, const char* Password, uint16_t PasswordLength);
+BOOL ValidCredentials(
+	_In_ const char* Username,
+	_In_ uint16_t UsernameLength,
+	_In_ const char* Password,
+	_In_ uint16_t PasswordLength);
 
-BOOL RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHashLen);
+BOOL RetrieveHash(
+	_In_ const char* Username,
+	_Out_opt_ char* retrievedHash,
+	_Out_opt_ DWORD* retrievedHashLen);
 
 BOOL createUsersDirectory(VOID);
 
@@ -31,9 +53,14 @@ void displayExitMSG(VOID);
 
 BOOL createUsersDatabase(VOID);
 
-BOOL createNewUserDirectory(const char* Username, uint16_t UsernameLength);
+BOOL createNewUserDirectory(
+	_In_ const char* Username,
+	_In_ uint16_t UsernameLength);
 
-BOOL buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength, TCHAR* UserDirPath);
+_Success_(return) BOOL buildUserPathAndCheckIfExists(
+	_In_ const char* Username,
+	_In_ uint16_t UsernameLength,
+	_Out_ TCHAR* UserDirPath);
 
 
 #endif // !_UTILS_H_

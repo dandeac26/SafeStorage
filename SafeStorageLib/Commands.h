@@ -91,10 +91,10 @@ SafeStorageDeinit(
  */
 NTSTATUS WINAPI
 SafeStorageHandleRegister(
-    const char* Username,
-    uint16_t UsernameLength,
-    const char* Password,
-    uint16_t PasswordLength
+    _In_ const char* Username,
+    _In_ uint16_t UsernameLength,
+    _In_ const char* Password,
+    _In_ uint16_t PasswordLength
 );
 
 
@@ -129,10 +129,10 @@ SafeStorageHandleRegister(
  */
 NTSTATUS WINAPI
 SafeStorageHandleLogin(
-    const char* Username,
-    uint16_t UsernameLength,
-    const char* Password,
-    uint16_t PasswordLength
+    _In_ const char* Username,
+    _In_ uint16_t UsernameLength,
+    _In_ const char* Password,
+    _In_ uint16_t PasswordLength
 );
 
 
@@ -187,10 +187,10 @@ SafeStorageHandleLogout(
  */
 NTSTATUS WINAPI
 SafeStorageHandleStore(
-    const char* SubmissionName,
-    uint16_t SubmissionNameLength,
-    const char* SourceFilePath,
-    uint16_t SourceFilePathLength
+    _In_ const char* SubmissionName,
+    _In_ uint16_t SubmissionNameLength,
+    _In_ const char* SourceFilePath,
+    _In_  uint16_t SourceFilePathLength
 );
 
 
@@ -227,10 +227,10 @@ SafeStorageHandleStore(
  */
 NTSTATUS WINAPI
 SafeStorageHandleRetrieve(
-    const char* SubmissionName,
-    uint16_t SubmissionNameLength,
-    const char* DestinationFilePath,
-    uint16_t DestinationFilePathLength
+   _In_ const char* SubmissionName,
+   _In_ uint16_t SubmissionNameLength,
+   _In_ const char* DestinationFilePath,
+   _In_ uint16_t DestinationFilePathLength
 );
 
 

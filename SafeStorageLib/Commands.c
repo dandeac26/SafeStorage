@@ -70,7 +70,7 @@ VOID WINAPI SafeStorageDeinit(VOID)
 }
 
 
-int usernameExists(const char* username)
+int usernameExists(_In_ const char* username)
 {
     int result = FAIL;
 
@@ -153,10 +153,10 @@ int usernameExists(const char* username)
 
 NTSTATUS WINAPI
 SafeStorageHandleRegister(
-    const char* Username,
-    uint16_t UsernameLength,
-    const char* Password,
-    uint16_t PasswordLength
+    _In_ const char* Username,
+    _In_ uint16_t UsernameLength,
+    _In_ const char* Password,
+    _In_ uint16_t PasswordLength
 )
 {
     if (AppState.LoggedUser != NULL)
@@ -195,13 +195,20 @@ SafeStorageHandleRegister(
     return STATUS_SUCCESS;
 }
 
-int LoginUser(const char* Username, uint16_t UsernameLength)
+int LoginUser(_In_ const char* Username, _In_ uint16_t UsernameLength)
 {
-    AppState.CurrentUserDirectory = (TCHAR*)calloc(sizeof(TCHAR), MAX_PATH);
+    AppState.CurrentUserDirectory = (TCHAR*)calloc(MAX_PATH, sizeof(TCHAR));
+
+    if (AppState.CurrentUserDirectory == NULL) {
+        printf("Memory allocation failed!\n");
+        return FAIL; 
+    }
+  
 
     if (buildUserPathAndCheckIfExists(Username, UsernameLength, AppState.CurrentUserDirectory) == FAIL)
     {
         printf("User directory no longer exists.\n");
+        free(AppState.CurrentUserDirectory);
         return FAIL;
     }
 
@@ -216,7 +223,7 @@ LoginRateTracker LoginTrackers[TRACKER_CAPACITY];
 size_t TrackerCount = 0;
 
 
-LoginRateTracker* FindOrCreateTracker(const char* Username)
+LoginRateTracker* FindOrCreateTracker(_In_ const char* Username)
 {
     for (size_t i = 0; i < TrackerCount; i++)
     {
@@ -249,7 +256,7 @@ LoginRateTracker* FindOrCreateTracker(const char* Username)
 }
 
 
-int IsRateLimited(LoginRateTracker* tracker)
+int IsRateLimited(_In_ LoginRateTracker* tracker)
 {
     time_t currentTime = time(NULL);
 
@@ -270,10 +277,10 @@ int IsRateLimited(LoginRateTracker* tracker)
 
 NTSTATUS WINAPI
 SafeStorageHandleLogin(
-    const char* Username,
-    uint16_t UsernameLength,
-    const char* Password,
-    uint16_t PasswordLength
+    _In_ const char* Username,
+    _In_ uint16_t UsernameLength,
+    _In_ const char* Password,
+    _In_ uint16_t PasswordLength
 )
 {
     if (AppState.LoggedUser != NULL)
@@ -347,7 +354,7 @@ SafeStorageHandleLogout(
     return STATUS_SUCCESS;
 }
 
-VOID CALLBACK ProcessFileChunk(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PTP_WORK Work) {
+VOID CALLBACK ProcessFileChunk(_In_ PTP_CALLBACK_INSTANCE Instance, _In_ PVOID Context, _In_ PTP_WORK Work) {
     UNREFERENCED_PARAMETER(Work);
     UNREFERENCED_PARAMETER(Instance);
 
@@ -383,9 +390,9 @@ VOID CALLBACK ProcessFileChunk(PTP_CALLBACK_INSTANCE Instance, PVOID Context, PT
 
 
 NTSTATUS TransferFile(
-    const char* sourcePath,
-    const char* destPath,
-    DWORD chunkSize
+    _In_ const char* sourcePath,
+    _In_ const char* destPath,
+    _In_ DWORD chunkSize
 ) {
     HANDLE hSource = CreateFileA(sourcePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hSource == INVALID_HANDLE_VALUE) {
@@ -482,10 +489,10 @@ NTSTATUS TransferFile(
 
 NTSTATUS WINAPI
 SafeStorageHandleStore(
-    const char* SubmissionName,
-    uint16_t SubmissionNameLength,
-    const char* SourceFilePath,
-    uint16_t SourceFilePathLength
+    _In_ const char* SubmissionName,
+    _In_ uint16_t SubmissionNameLength,
+    _In_ const char* SourceFilePath,
+    _In_ uint16_t SourceFilePathLength
 )
 {
 
@@ -569,10 +576,10 @@ SafeStorageHandleStore(
 
 NTSTATUS WINAPI
 SafeStorageHandleRetrieve(
-    const char* SubmissionName,
-    uint16_t SubmissionNameLength,
-    const char* DestinationFilePath,
-    uint16_t DestinationFilePathLength
+    _In_ const char* SubmissionName,
+    _In_ uint16_t SubmissionNameLength,
+    _In_ const char* DestinationFilePath,
+    _In_ uint16_t DestinationFilePathLength
 )
 {
     if (AppState.LoggedUser == NULL)
