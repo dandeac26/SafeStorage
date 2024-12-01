@@ -134,6 +134,9 @@ BOOL createNewUserDirectory(_In_ const char* Username, _In_ uint16_t UsernameLen
     return FAIL;
 }
 
+/// disable warning 6386 because it is checked above the line _tcsncpy_s(UserDirPath, MAX_PATH, dirPath, _tcslen(dirPath)) but tool doesn't see it
+#pragma warning( push )
+#pragma warning( disable : 6386)
 
 _Success_(return) BOOL buildUserPathAndCheckIfExists(_In_ const char* Username, _In_ uint16_t UsernameLength, _Out_ TCHAR* UserDirPath)
 {
@@ -191,13 +194,13 @@ _Success_(return) BOOL buildUserPathAndCheckIfExists(_In_ const char* Username, 
         printf("Resulting file path too long!\n");
         return FAIL;
     }
-    if (_tcsncpy_s(UserDirPath, MAX_PATH, dirPath, _tcslen(dirPath)) != 0) { // was last param:
+    if (_tcsncpy_s(UserDirPath, MAX_PATH, dirPath, _tcslen(dirPath)) != 0) { // generates warning but checked above:
         return FAIL;
     }
 
     return SUCCESS;
 }
-
+#pragma warning( pop )
 
 int IsSpecialCharacter(_In_ char ch)
 {
