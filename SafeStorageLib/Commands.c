@@ -70,9 +70,9 @@ VOID WINAPI SafeStorageDeinit(VOID)
 }
 
 
-int usernameExists(_In_ const char* username)
+BOOL usernameExists(_In_ const char* username)
 {
-    int result = FAIL;
+    BOOL result = FAIL;
 
     HANDLE FileUsersDB = CreateFile(
         _T("users.txt"),
@@ -195,7 +195,7 @@ SafeStorageHandleRegister(
     return STATUS_SUCCESS;
 }
 
-int LoginUser(_In_ const char* Username, _In_ uint16_t UsernameLength)
+BOOL LoginUser(_In_ const char* Username, _In_ uint16_t UsernameLength)
 {
     AppState.CurrentUserDirectory = (TCHAR*)calloc(MAX_PATH, sizeof(TCHAR));
 
@@ -256,7 +256,7 @@ LoginRateTracker* FindOrCreateTracker(_In_ const char* Username)
 }
 
 
-int IsRateLimited(_In_ LoginRateTracker* tracker)
+BOOL IsRateLimited(_In_ LoginRateTracker* tracker)
 {
     time_t currentTime = time(NULL);
 

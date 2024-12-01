@@ -137,7 +137,6 @@ BOOL createNewUserDirectory(_In_ const char* Username, _In_ uint16_t UsernameLen
 /// disable warning 6386 because it is checked above the line _tcsncpy_s(UserDirPath, MAX_PATH, dirPath, _tcslen(dirPath)) but tool doesn't see it
 #pragma warning( push )
 #pragma warning( disable : 6386)
-
 _Success_(return) BOOL buildUserPathAndCheckIfExists(_In_ const char* Username, _In_ uint16_t UsernameLength, _Out_ TCHAR* UserDirPath)
 {
     if (UserDirPath == NULL) {
@@ -202,14 +201,14 @@ _Success_(return) BOOL buildUserPathAndCheckIfExists(_In_ const char* Username, 
 }
 #pragma warning( pop )
 
-int IsSpecialCharacter(_In_ char ch)
+BOOL IsSpecialCharacter(_In_ char ch)
 {
     const char* specialChars = "!@#$%^&";
     return strchr(specialChars, ch) != NULL;
 }
 
 
-int SanitizedUsername(_In_ const char* username, _In_ uint16_t length)
+BOOL SanitizedUsername(_In_ const char* username, _In_ uint16_t length)
 {
 
     if (length < 5 || length > 10)
@@ -228,7 +227,7 @@ int SanitizedUsername(_In_ const char* username, _In_ uint16_t length)
 }
 
 
-int SanitizedPassword(_In_ const char* password, _In_ uint16_t length)
+BOOL SanitizedPassword(_In_ const char* password, _In_ uint16_t length)
 {
     if (length < 5 || length > 25) // upper limit - Could cause tests to fail as it is not in the requirements
     {

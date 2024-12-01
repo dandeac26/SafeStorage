@@ -9,7 +9,6 @@
   <ItemGroup>
     <ClInclude Include="Commands.h" />
     <ClInclude Include="includes.h" />
-    <ClInclude Include="Store.h" />
     <ClInclude Include="Utils.h" />
   </ItemGroup>
   <ItemGroup>

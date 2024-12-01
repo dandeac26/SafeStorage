@@ -63,4 +63,6 @@ _Success_(return) BOOL buildUserPathAndCheckIfExists(
 	_Out_ TCHAR* UserDirPath);
 
 
+
+
 #endif // !_UTILS_H_
