@@ -23,7 +23,6 @@ typedef struct {
 
 extern TCHAR g_AppDir[MAX_PATH];
 extern DWORD g_AppDirBuffSize;
-extern HANDLE g_hFileUsersDB;
 
 /*
  * @brief       This command will be called at the beginning to initialize support for the safe storage lib.

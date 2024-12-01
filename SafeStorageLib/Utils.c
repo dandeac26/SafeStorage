@@ -14,7 +14,7 @@ int createUsersDatabase(VOID)
     }
 
     // if doesn't exist, create it
-    g_hFileUsersDB = CreateFile(
+    HANDLE hFileUsersDB = CreateFile(
         fileName,
         GENERIC_WRITE | GENERIC_READ,
         0,
@@ -24,11 +24,13 @@ int createUsersDatabase(VOID)
         NULL
     );
 
-    // Check if the file was created successfully
-    if (g_hFileUsersDB == INVALID_HANDLE_VALUE) {
+    if (hFileUsersDB == INVALID_HANDLE_VALUE) {
         printf("Error creating file: (%d)", GetLastError());
         return FAIL;
     }
+
+    CloseHandle(hFileUsersDB);
+
     return SUCCESS;
 }
 
@@ -100,7 +102,6 @@ int createNewUserDirectory(const char* Username, uint16_t UsernameLength)
 
     if (!SanitizeFilePath2(dirPath, _tcslen(dirPath)))
     {
-        //_tprintf(TEXT("Bad path: %s"), dirPath);
         printf("sanitize fail\n");
         return FAIL;
     }
@@ -183,7 +184,7 @@ int buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength,
     if (_tcsncpy_s(UserDirPath, MAX_PATH, dirPath, _tcslen(dirPath)) != 0) {
         return FAIL;
     }
-    // need to check if a file named as directory exists maybe? but i hope file atrib directory handles this
+
     return SUCCESS;
 }
 
@@ -303,7 +304,7 @@ int SanitizeFilePath(const char* filepath, size_t length, LPCSTR appdir)
 }
 
 
-int SanitizeFilePath2(const TCHAR* filepath, size_t length) // with normalization
+int SanitizeFilePath2(const TCHAR* filepath, size_t length) 
 {
     if (length == 0 || filepath == NULL)
     {
@@ -332,8 +333,6 @@ int SanitizeFilePath2(const TCHAR* filepath, size_t length) // with normalizatio
 
     return TRUE;
 }
-
-
 
 
 int SanitizeFilePath3(const TCHAR* filepath, size_t length, const TCHAR* basePath) // with normalization
@@ -438,11 +437,10 @@ DWORD VerifyPassword(const BYTE* password, DWORD length, char* hash, DWORD hashl
 {
     if (password == NULL || hash == NULL || hashlen != (HASH_SIZE - 1))
     {
-        // Invalid parameters
         return FALSE;
     }
 
-    /// obtain hash of password
+    
     char generatedHash[HASH_SIZE];
     DWORD generatedHashlen = sizeof(hash);
     if (EncryptPassword(password, length, generatedHash, &generatedHashlen) != 0) {
