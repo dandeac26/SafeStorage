@@ -607,3 +607,6 @@ int RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHash
     CloseHandle(FileUsersDB);
     return result;
 }
+
+
+
