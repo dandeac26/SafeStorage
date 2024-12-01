@@ -1,7 +1,7 @@
 #include "Utils.h"
 
 
-int createUsersDatabase(VOID)
+BOOL createUsersDatabase(VOID)
 {
     const TCHAR* fileName = _T("users.txt");
 
@@ -25,7 +25,7 @@ int createUsersDatabase(VOID)
     );
 
     if (hFileUsersDB == INVALID_HANDLE_VALUE) {
-        printf("Error creating file: (%d)", GetLastError());
+        printf_s("Error creating file: (%d)", GetLastError());
         return FAIL;
     }
 
@@ -41,7 +41,7 @@ void displayExitMSG(VOID)
     //getchar();
 }
 
-int createUsersDirectory(VOID)
+BOOL createUsersDirectory(VOID)
 {
     TCHAR dirPath[MAX_PATH];
     _tcscpy_s(dirPath, MAX_PATH, g_AppDir);
@@ -58,7 +58,7 @@ int createUsersDirectory(VOID)
     {
         if (!CreateDirectory((LPCWSTR)dirPath, NULL))
         {
-            printf("CreateDirectory failed (%d)\n", GetLastError());
+            printf_s("CreateDirectory failed (%d)\n", GetLastError());
             return FAIL;
         }
         else return SUCCESS;
@@ -75,7 +75,7 @@ int createUsersDirectory(VOID)
 }
 
 
-int createNewUserDirectory(const char* Username, uint16_t UsernameLength)
+BOOL createNewUserDirectory(const char* Username, uint16_t UsernameLength)
 {
     TCHAR dirPath[MAX_PATH];
     _tcscpy_s(dirPath, MAX_PATH, g_AppDir);
@@ -96,11 +96,11 @@ int createNewUserDirectory(const char* Username, uint16_t UsernameLength)
 
     if (PathAppend(dirPath, usr) == 0)
     {
-        printf("Error: failed to append %s dir to APPDIR.\n", Username);
+        printf_s("Error: failed to append %s dir to APPDIR.\n", Username);
         return FAIL;
     }
 
-    if (!SanitizeFilePath2(dirPath, _tcslen(dirPath)))
+    if (!SanitizeFilePath_UserDir(dirPath, _tcslen(dirPath)))
     {
         printf("sanitize fail\n");
         return FAIL;
@@ -112,7 +112,7 @@ int createNewUserDirectory(const char* Username, uint16_t UsernameLength)
     {
         if (!CreateDirectory((LPCWSTR)dirPath, NULL))
         {
-            printf("CreateDirectory failed (%d)\n", GetLastError());
+            printf_s("CreateDirectory failed (%d)\n", GetLastError());
             return FAIL;
         }
         else
@@ -135,7 +135,7 @@ int createNewUserDirectory(const char* Username, uint16_t UsernameLength)
 }
 
 
-int buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength, TCHAR* UserDirPath)
+BOOL buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength, TCHAR* UserDirPath)
 {
     TCHAR dirPath[MAX_PATH];
     _tcscpy_s(dirPath, MAX_PATH, g_AppDir);
@@ -156,11 +156,11 @@ int buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength,
 
     if (PathAppend(dirPath, usr) == 0)
     {
-        printf("Error: failed to append %s dir to APPDIR.\n", Username);
+        printf_s("Error: failed to append %s dir to APPDIR.\n", Username);
         return FAIL;
     }
 
-    if (!SanitizeFilePath2(dirPath, _tcslen(dirPath)))
+    if (!SanitizeFilePath_Normalization(dirPath, _tcslen(dirPath), UserDirPath))
     {
         printf("sanitize fail\n");
         return FAIL;
@@ -217,7 +217,7 @@ int SanitizedUsername(const char* username, uint16_t length)
 
 int SanitizedPassword(const char* password, uint16_t length)
 {
-    if (length < 5 || length > 25)
+    if (length < 5 || length > 25) // upper limit - Could cause tests to fail as it is not in the requirements
     {
         return FALSE;
     }
@@ -256,76 +256,48 @@ int SanitizedPassword(const char* password, uint16_t length)
 }
 
 
-int SanitizeFilePath(const char* filepath, size_t length, LPCSTR appdir)
+BOOL SanitizeFilePath_UserDir(const TCHAR* filepath, size_t length)
 {
     if (length == 0 || filepath == NULL)
     {
         return FALSE;
     }
 
+    TCHAR resolvedPath[MAX_PATH];
 
-    char normalizedPath[MAX_PATH] = { 0 };
-    char resolvedBasePath[MAX_PATH] = { 0 };
+    if (GetFullPathName((LPCWSTR)filepath, MAX_PATH, (LPWSTR)resolvedPath, NULL) == 0)
+    {
+        return FALSE;
+    }
 
-
-    // Normalization strategy
-    if (GetFullPathNameA(filepath, MAX_PATH, normalizedPath, NULL) == 0)
+    // checks if its %appdir%/users/username
+    if (_tcsncmp(filepath, resolvedPath, _tcslen(filepath)) != 0)
     {
         return FALSE;
     }
 
 
-    if (GetFullPathNameA(appdir, MAX_PATH, resolvedBasePath, NULL) == 0)
-    {
-        return FALSE;
-    }
 
-
-    if (strncmp(normalizedPath, resolvedBasePath, strlen(resolvedBasePath)) != 0)
-    {
-        return FALSE;
-    }
-
-
-    for (size_t i = 0; i < length; i++)
-    {
-        if (filepath[i] == '\0')
-        {
-            return FALSE;
-        }
-        if (i < length - 1 && filepath[i] == '.' && filepath[i + 1] == '.')
-        {
-            return FALSE;
-        }
-    }
-
-
-    return TRUE;
-}
-
-
-int SanitizeFilePath2(const TCHAR* filepath, size_t length) 
-{
-    if (length == 0 || filepath == NULL)
-    {
-        return FALSE;
-    }
-
+    // make sure same base path
     TCHAR resolvedBasePath[MAX_PATH];
 
-    if (GetFullPathName((LPCWSTR)filepath, MAX_PATH, (LPWSTR)resolvedBasePath, NULL) == 0)
+    if (GetFullPathName((LPCWSTR)g_AppDir, MAX_PATH, (LPWSTR)resolvedBasePath, NULL) == 0)
     {
+        printf("Error Sanitization\n");
         return FALSE;
     }
 
-    if (_tcsncmp((const TCHAR*)filepath, (const TCHAR*)resolvedBasePath, _tcslen((const TCHAR*)filepath)) != 0)
+    if (_tcsncmp(filepath, resolvedBasePath, _tcslen(resolvedBasePath)) != 0)
     {
+        printf("Failed base path check\n");
         return FALSE;
     }
+
+    
 
     for (size_t i = 0; i < length; i++)
     {
-        if (filepath[i] == '\0')
+        if (filepath[i] == '\0' || filepath[i] == '*' || filepath[i] == '|')
         {
             return FALSE;
         }
@@ -335,7 +307,7 @@ int SanitizeFilePath2(const TCHAR* filepath, size_t length)
 }
 
 
-int SanitizeFilePath3(const TCHAR* filepath, size_t length, const TCHAR* basePath) // with normalization
+BOOL SanitizeFilePath_Normalization(const TCHAR* filepath, size_t length, const TCHAR* basePath) // with normalization
 {
     if (length == 0 || filepath == NULL || basePath == NULL)
     {
@@ -349,7 +321,7 @@ int SanitizeFilePath3(const TCHAR* filepath, size_t length, const TCHAR* basePat
         return FALSE;
     }
 
-    if (_tcsnicmp((const TCHAR*)resolvedFilePath, basePath, _tcslen(basePath)) != 0)
+    if (_tcsncmp(resolvedFilePath, basePath, _tcslen(basePath)) != 0)
     {
         printf("Sanitization failed! Directory out of bounds!\n");
         return FALSE;
@@ -383,14 +355,14 @@ DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* has
         CRYPT_VERIFYCONTEXT))
     {
         dwStatus = GetLastError();
-        printf("CryptAcquireContext failed: %d\n", dwStatus);
+        printf_s("CryptAcquireContext failed: %d\n", dwStatus);
         return dwStatus;
     }
 
     if (!CryptCreateHash(hProv, CALG_MD5, 0, 0, &hHash))
     {
         dwStatus = GetLastError();
-        printf("CryptCreateHash failed: %d\n", dwStatus);
+        printf_s("CryptCreateHash failed: %d\n", dwStatus);
         CryptReleaseContext(hProv, 0);
         return dwStatus;
     }
@@ -399,7 +371,7 @@ DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* has
     if (!CryptHashData(hHash, password, length, 0))
     {
         dwStatus = GetLastError();
-        printf("CryptHashData failed: %d\n", dwStatus);
+        printf_s("CryptHashData failed: %d\n", dwStatus);
         CryptReleaseContext(hProv, 0);
         CryptDestroyHash(hHash);
         return dwStatus;
@@ -423,7 +395,7 @@ DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* has
         *hashlen = 0;
         hash = NULL;
         dwStatus = GetLastError();
-        printf("CryptGetHashParam failed: %d\n", dwStatus);
+        printf_s("CryptGetHashParam failed: %d\n", dwStatus);
     }
 
     CryptDestroyHash(hHash);
@@ -471,7 +443,7 @@ void InsertUser(const char* Username, const char* hash)
 
 
     if (FileUsersDB == INVALID_HANDLE_VALUE) {
-        printf("Failed to open users.txt: %d\n", GetLastError());
+        printf_s("Failed to open users.txt: %d\n", GetLastError());
         return;
     }
 
@@ -504,7 +476,7 @@ void InsertUser(const char* Username, const char* hash)
 
 
 
-int ValidCredentials(const char* Username, uint16_t UsernameLength, const char* Password, uint16_t PasswordLength)
+BOOL ValidCredentials(const char* Username, uint16_t UsernameLength, const char* Password, uint16_t PasswordLength)
 {
     if (!SanitizedUsername(Username, UsernameLength))
     {
@@ -514,7 +486,7 @@ int ValidCredentials(const char* Username, uint16_t UsernameLength, const char* 
 
     if (!SanitizedPassword(Password, PasswordLength))
     {
-        printf("%s", "Password must have at least 5 and less than 25 characters and contain at least one digit, one lowercase letter, one uppercase letter, and at least one special symbol(!@#$%^&)\n");
+        printf("%s", "Password must have at least 5 and no more than 25 characters and contain at least one digit, one lowercase letter, one uppercase letter, and at least one special symbol(!@#$%^&)\n");
         return FALSE;
     }
 
@@ -522,7 +494,7 @@ int ValidCredentials(const char* Username, uint16_t UsernameLength, const char* 
 }
 
 
-int RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHashLen)
+BOOL RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHashLen)
 {
     int result = FAIL;
 

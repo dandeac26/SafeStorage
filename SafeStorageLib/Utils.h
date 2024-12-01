@@ -10,11 +10,10 @@
 #define MD5LEN  16
 #define HASH_SIZE (MD5LEN * 2 + 1)
 
-int SanitizeFilePath3(const TCHAR* filepath, size_t length, const TCHAR* basePath);
+BOOL SanitizeFilePath_Normalization(const TCHAR* filepath, size_t length, const TCHAR* basePath);
 
-int SanitizeFilePath2(const TCHAR* filepath, size_t length);
+BOOL SanitizeFilePath_UserDir(const TCHAR* filepath, size_t length);
 
-int SanitizeFilePath(const char* filepath, size_t length, LPCSTR appdir);
 
 DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* hashlen);
 
@@ -22,15 +21,19 @@ DWORD VerifyPassword(const BYTE* password, DWORD length, char* hash, DWORD hashl
 
 void InsertUser(const char* Username, const char* hash);
 
-int ValidCredentials(const char* Username, uint16_t UsernameLength, const char* Password, uint16_t PasswordLength);
+BOOL ValidCredentials(const char* Username, uint16_t UsernameLength, const char* Password, uint16_t PasswordLength);
 
-int RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHashLen);
+BOOL RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHashLen);
 
-int createUsersDirectory(VOID);
+BOOL createUsersDirectory(VOID);
+
 void displayExitMSG(VOID);
-int createUsersDatabase(VOID);
 
-int createNewUserDirectory(const char* Username, uint16_t UsernameLength);
+BOOL createUsersDatabase(VOID);
 
-int buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength, TCHAR* UserDirPath);
+BOOL createNewUserDirectory(const char* Username, uint16_t UsernameLength);
+
+BOOL buildUserPathAndCheckIfExists(const char* Username, uint16_t UsernameLength, TCHAR* UserDirPath);
+
+
 #endif // !_UTILS_H_

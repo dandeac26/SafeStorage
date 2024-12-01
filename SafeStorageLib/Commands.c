@@ -29,7 +29,7 @@ NTSTATUS WINAPI SafeStorageInit(VOID)
     g_AppDirBuffSize = GetCurrentDirectory(MAX_PATH, g_AppDir);
     if (g_AppDirBuffSize == FAIL)
     {
-        printf("Error finding current directory (%d)\n", GetLastError());
+        printf_s("Error finding current directory (%d)\n", GetLastError());
         displayExitMSG();
         return STATUS_UNSUCCESSFUL;
     }
@@ -104,7 +104,7 @@ int usernameExists(const char* username)
     while (TRUE)
     {
         if (!ReadFile(FileUsersDB, buffer, sizeof(buffer) - 1, &bytesRead, NULL)) {
-            printf("ReadFile failed: %d\n", GetLastError());
+            printf_s("ReadFile failed: %d\n", GetLastError());
             return result;
         }
 
@@ -529,7 +529,7 @@ SafeStorageHandleStore(
         return STATUS_INTERNAL_ERROR;
     }
 
-    if (!SanitizeFilePath3(destPath, _tcslen(destPath), AppState.CurrentUserDirectory))
+    if (!SanitizeFilePath_Normalization(destPath, _tcslen(destPath), AppState.CurrentUserDirectory))
     {
         printf("Fail destPath sanitization\n");
         return FAIL;
@@ -544,7 +544,7 @@ SafeStorageHandleStore(
     }
     chr_destPath[l] = '\0';
 
-    // This should be here, but just in case tests get stopped by this, i commented it
+    // This should be here, but just in case tests fail by this, i commented it
 
     /*HANDLE testExisting = CreateFileA(chr_destPath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (testExisting != INVALID_HANDLE_VALUE)
@@ -609,7 +609,7 @@ SafeStorageHandleRetrieve(
         return STATUS_INTERNAL_ERROR;
     }
     
-    if (!SanitizeFilePath3(sourcePath, _tcslen(sourcePath), AppState.CurrentUserDirectory))
+    if (!SanitizeFilePath_Normalization(sourcePath, _tcslen(sourcePath), AppState.CurrentUserDirectory))
     {
         printf("Fail sourcePath sanitization\n");
         return FAIL;
