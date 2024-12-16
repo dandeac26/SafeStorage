@@ -10,27 +10,57 @@
 #define MD5LEN  16
 #define HASH_SIZE (MD5LEN * 2 + 1)
 
-// Function to sanitize username
-//int SanitizedUsername(const char* username, uint16_t length);
-//
-//// Function to sanitize password
-//int SanitizedPassword(const char* password, uint16_t length);
+BOOL SanitizeFilePath_Normalization(
+	_In_ const TCHAR* filepath,
+	_In_ size_t length,
+	_In_ const TCHAR* basePath);
 
-// Function to sanitize file path
-int SanitizeFilePath(const char* filepath, uint16_t length, LPCSTR appdir);
 
-// Function for Encryption
-DWORD EncryptPassword(const BYTE* password, DWORD length, char* hash, DWORD* hashlen);
+BOOL SanitizeFilePath_UserDir(
+	_In_ const TCHAR* filepath,
+	_In_ size_t length);
 
-// Function for Decryption
+DWORD EncryptPassword(
+	_In_ const BYTE* password,
+	_In_ DWORD length,
+	_Out_opt_ char* hash,
+	_Out_opt_ DWORD* hashlen);
 
-DWORD VerifyPassword(const BYTE* password, DWORD length, char* hash, DWORD hashlen);
+DWORD VerifyPassword(
+	_In_ const BYTE* password,
+	_In_ DWORD length,
+	_In_ char* hash,
+	_In_ DWORD hashlen);
 
-void InsertUser(const char* Username, const char* hash);
+void InsertUser(
+	_In_ const char* Username,
+	_In_ const char* hash);
 
-int ValidCredentials(const char* Username, uint16_t UsernameLength, const char* Password, uint16_t PasswordLength);
+BOOL ValidCredentials(
+	_In_ const char* Username,
+	_In_ uint16_t UsernameLength,
+	_In_ const char* Password,
+	_In_ uint16_t PasswordLength);
 
-int RetrieveHash(const char* Username, char* retrievedHash, DWORD* retrievedHashLen);
+BOOL RetrieveHash(
+	_In_ const char* Username,
+	_Out_opt_ char* retrievedHash,
+	_Out_opt_ DWORD* retrievedHashLen);
+
+BOOL createUsersDirectory(VOID);
+
+void displayExitMSG(VOID);
+
+BOOL createUsersDatabase(VOID);
+
+BOOL createNewUserDirectory(
+	_In_ const char* Username,
+	_In_ uint16_t UsernameLength);
+
+_Success_(return) BOOL buildUserPathAndCheckIfExists(
+	_In_ const char* Username,
+	_In_ uint16_t UsernameLength,
+	_Out_ TCHAR* UserDirPath);
 
 
 

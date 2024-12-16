@@ -9,22 +9,20 @@ EXTERN_C_START;
 
 #define SUCCESS 1
 #define FAIL 0
-#define true 1
-#define false 0
+#define TRUE 1
+#define FALSE 0
+
+#define MAX_ATTEMPTS_PER_SECOND 1
+#define TRACKER_CAPACITY 100
+
+typedef struct {
+    char Username[256];
+    uint32_t AttemptCount;
+    time_t FirstAttemptTime;
+} LoginRateTracker;
 
 extern TCHAR g_AppDir[MAX_PATH];
 extern DWORD g_AppDirBuffSize;
-extern HANDLE g_hFileUsersDB;
-
-//typedef struct SESSION_DATA
-//{
-//    char* LoggedUser;
-//
-//
-//};
-
-//static char* LoggedUser;
-
 
 /*
  * @brief       This command will be called at the beginning to initialize support for the safe storage lib.
@@ -93,10 +91,10 @@ SafeStorageDeinit(
  */
 NTSTATUS WINAPI
 SafeStorageHandleRegister(
-    const char* Username,
-    uint16_t UsernameLength,
-    const char* Password,
-    uint16_t PasswordLength
+    _In_ const char* Username,
+    _In_ uint16_t UsernameLength,
+    _In_ const char* Password,
+    _In_ uint16_t PasswordLength
 );
 
 
@@ -131,10 +129,10 @@ SafeStorageHandleRegister(
  */
 NTSTATUS WINAPI
 SafeStorageHandleLogin(
-    const char* Username,
-    uint16_t UsernameLength,
-    const char* Password,
-    uint16_t PasswordLength
+    _In_ const char* Username,
+    _In_ uint16_t UsernameLength,
+    _In_ const char* Password,
+    _In_ uint16_t PasswordLength
 );
 
 
@@ -189,10 +187,10 @@ SafeStorageHandleLogout(
  */
 NTSTATUS WINAPI
 SafeStorageHandleStore(
-    const char* SubmissionName,
-    uint16_t SubmissionNameLength,
-    const char* SourceFilePath,
-    uint16_t SourceFilePathLength
+    _In_ const char* SubmissionName,
+    _In_ uint16_t SubmissionNameLength,
+    _In_ const char* SourceFilePath,
+    _In_  uint16_t SourceFilePathLength
 );
 
 
@@ -229,10 +227,10 @@ SafeStorageHandleStore(
  */
 NTSTATUS WINAPI
 SafeStorageHandleRetrieve(
-    const char* SubmissionName,
-    uint16_t SubmissionNameLength,
-    const char* DestinationFilePath,
-    uint16_t DestinationFilePathLength
+   _In_ const char* SubmissionName,
+   _In_ uint16_t SubmissionNameLength,
+   _In_ const char* DestinationFilePath,
+   _In_ uint16_t DestinationFilePathLength
 );
 
 
