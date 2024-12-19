@@ -378,6 +378,7 @@ DWORD EncryptPassword(_In_ const BYTE* password, _In_ DWORD length, _Out_opt_ ch
     {
         dwStatus = GetLastError();
         printf_s("CryptAcquireContext failed: %d\n", dwStatus);
+        free(hashlen);
         return dwStatus;
     }
 
@@ -386,6 +387,7 @@ DWORD EncryptPassword(_In_ const BYTE* password, _In_ DWORD length, _Out_opt_ ch
         dwStatus = GetLastError();
         printf_s("CryptCreateHash failed: %d\n", dwStatus);
         CryptReleaseContext(hProv, 0);
+        free(hashlen);
         return dwStatus;
     }
 
@@ -396,6 +398,7 @@ DWORD EncryptPassword(_In_ const BYTE* password, _In_ DWORD length, _Out_opt_ ch
         printf_s("CryptHashData failed: %d\n", dwStatus);
         CryptReleaseContext(hProv, 0);
         CryptDestroyHash(hHash);
+        free(hashlen);
         return dwStatus;
     }
 
@@ -419,7 +422,7 @@ DWORD EncryptPassword(_In_ const BYTE* password, _In_ DWORD length, _Out_opt_ ch
         dwStatus = GetLastError();
         printf_s("CryptGetHashParam failed: %d\n", dwStatus);
     }
-
+    free(hashlen);
     CryptDestroyHash(hHash);
     CryptReleaseContext(hProv, 0);
 
@@ -526,7 +529,7 @@ BOOL RetrieveHash(_In_ const char* Username, _Out_opt_ char* retrievedHash, _Out
         printf("Memory allocation failed.\n");
         return result;
     }
-
+   
     *retrievedHashLen = 0;
 
     HANDLE FileUsersDB = CreateFile(
@@ -542,6 +545,7 @@ BOOL RetrieveHash(_In_ const char* Username, _Out_opt_ char* retrievedHash, _Out
 
     if (FileUsersDB == INVALID_HANDLE_VALUE)
     {
+        free(retrievedHashLen);
         return result;
     }
 
@@ -560,6 +564,7 @@ BOOL RetrieveHash(_In_ const char* Username, _Out_opt_ char* retrievedHash, _Out
         if (!ReadFile(FileUsersDB, buffer, sizeof(buffer) - 1, &bytesRead, NULL)) {
             printf_s("ReadFile failed: %d\n", GetLastError());
             CloseHandle(FileUsersDB);
+            free(retrievedHashLen);
             return result;
         }
 
@@ -606,7 +611,7 @@ BOOL RetrieveHash(_In_ const char* Username, _Out_opt_ char* retrievedHash, _Out
     }
 
     CloseHandle(FileUsersDB);
-    
+    free(retrievedHashLen);
     return result;
 }
 

@@ -1,5 +1,10 @@
 ﻿#include "Commands.h"
 
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+
+
 TCHAR g_AppDir[MAX_PATH];
 DWORD g_AppDirBuffSize;
 
@@ -25,6 +30,7 @@ typedef struct _FILE_TRANSFER_INFO {
 
 NTSTATUS WINAPI SafeStorageInit(VOID)
 {
+    _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
     // find %APPDIR%
     g_AppDirBuffSize = GetCurrentDirectory(MAX_PATH, g_AppDir);
     if (g_AppDirBuffSize == FAIL)
@@ -567,6 +573,9 @@ SafeStorageHandleStore(
         return STATUS_UNSUCCESSFUL;
     }
 
+    free(destPath);
+    free(submissionName);
+
     UNREFERENCED_PARAMETER(SourceFilePathLength);
 
     return STATUS_SUCCESS;
@@ -643,9 +652,13 @@ SafeStorageHandleRetrieve(
     
     if (TransferFile(chr_sourcePath, DestinationFilePath, 64*1024) != STATUS_SUCCESS)
     {
+       
         return STATUS_UNSUCCESSFUL;
     }
     
+    free(sourcePath);
+    free(submissionName);
+
     UNREFERENCED_PARAMETER(DestinationFilePathLength);
 
     return STATUS_SUCCESS;

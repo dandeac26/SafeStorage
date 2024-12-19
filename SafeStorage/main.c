@@ -36,6 +36,7 @@ PrintHelp()
 int CDECL
 main()
 {
+    
     char command[10];
     char arg1[MAX_PATH];
     char arg2[MAX_PATH];
