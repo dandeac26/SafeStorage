@@ -11,3 +11,6 @@ Defend against:
 - Buffer Overflow attacks
 - Path Traversal
 - Brute force attacks
+
+## Path Traversal Example
+![image](https://github.com/user-attachments/assets/208fcd77-2b9c-4f5c-8514-bd44a12d2f27)
