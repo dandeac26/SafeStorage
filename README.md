@@ -1,4 +1,4 @@
-## Assignement from Software Security / Secure Coding Course
+## Assignment from Software Security / Secure Coding Course
 
 Developed a "Safe Storage" application where users can login / register to a CLI and save files in their specific user folders.
 For storing users a simple file database is used. passwords are encrypted.
