@@ -1,0 +1,30 @@
+﻿flowchart TD
+    A(["User: store src_file submission\nor retrieve submission dest"]) --> B
+
+    B["Check: AppState.LoggedUser != NULL"] --> C{Logged in?}
+    C -- No --> Z1(["Return STATUS_FAIL"])
+
+    C -- Yes --> D["Build full path:\nCurrentUserDirectory + submission name\nvia PathAppend"]
+
+    D --> E["SanitizeFilePath3:\n① GetFullPathName — normalize to absolute\n② _tcsnicmp — verify base path prefix\n③ Scan for '..' sequences\n④ Block dangerous chars: * | null-byte"]
+
+    E --> F{Path safe?}
+    F -- No --> Z2(["Return STATUS_FAIL\nPath traversal blocked"])
+
+    F -- Yes --> G["TransferFile:\nCreateFileA source — GENERIC_READ\nCreateFileA dest — GENERIC_WRITE, CREATE_ALWAYS\nGetFileSizeEx — read file size"]
+
+    G --> H{File size > 8 GB?}
+    H -- Yes --> Z3(["Return STATUS_FAIL\nFile too large"])
+
+    H -- No --> I["Calculate chunk count\nChunk size: 64 KB\nCreate Windows Thread Pool\nMin threads: 4 · Max threads: 4"]
+
+    I --> J["Submit TP work item per chunk offset\nCreateThreadpoolWork + SubmitThreadpoolWork"]
+
+    J --> K["ProcessFileChunk callback:\nEnterCriticalSection g_csFileWrite\nHeapAlloc — allocate chunk buffer\nSetFilePointerEx — seek to chunk offset\nReadFile — read chunk from source\nWriteFile — write chunk to destination\nHeapFree — release buffer\nLeaveCriticalSection"]
+
+    K --> L{All chunks\ncomplete?}
+    L -- No --> K
+
+    L -- Yes --> M["WaitForThreadpoolWorkCallbacks\nCloseThreadpoolWork\nDeleteCriticalSection\nCloseHandle source and dest"]
+
+    M --> N(["Return STATUS_SUCCESS"])

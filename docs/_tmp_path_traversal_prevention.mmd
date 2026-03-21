@@ -1,0 +1,25 @@
+﻿flowchart TD
+    A(["Input: filePath + basePath"]) --> B
+
+    B["GetFullPathName filePath\n→ normalizedPath\nResolves ., .., symlinks to absolute form"]
+
+    B --> C["GetFullPathName basePath\n→ normalizedBase\nNormalizes the allowed storage root"]
+
+    C --> D{"_tcsnicmp:\nnormalizedPath starts\nwith normalizedBase?\n(case-insensitive)"}
+
+    D -- No --> F1(["REJECT\nPath escapes storage directory\ne.g. C:\\users\\admin\\secret.txt"])
+
+    D -- Yes --> E{"Original path\ncontains '..'?"}
+
+    E -- Yes --> F2(["REJECT\nDirectory traversal attempt\ne.g. ..\\..\\Windows\\system.ini"])
+
+    E -- No --> G{"Path contains\ndangerous characters?\n* pipe null-byte"}
+
+    G -- Yes --> F3(["REJECT\nDangerous character\ne.g. wildcard or ADS separator"])
+
+    G -- No --> H(["ACCEPT\nPath is within allowed directory\nand contains no traversal sequences"])
+
+    style F1 fill:#c0392b,color:#fff
+    style F2 fill:#c0392b,color:#fff
+    style F3 fill:#c0392b,color:#fff
+    style H fill:#27ae60,color:#fff

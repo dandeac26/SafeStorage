@@ -1,0 +1,37 @@
+﻿graph TB
+    subgraph CLI ["SafeStorage — CLI Application"]
+        main["main.c\nCommand Parser\nPrintHelp · scanf loop"]
+    end
+
+    subgraph Lib ["SafeStorageLib — Security Library (primary author contribution)"]
+        Commands["Commands.c\nSafeStorageHandleRegister\nSafeStorageHandleLogin · Logout\nSafeStorageHandleStore · Retrieve\nLoginRateTracker · TransferFile\nProcessFileChunk"]
+        Utils["Utils.c\nValidCredentials · SanitizeFilePath3\nEncryptPassword · VerifyPassword\nInsertUser · RetrieveHash\ncreateNewUserDirectory"]
+    end
+
+    subgraph WinAPI ["Windows APIs"]
+        Crypto["CryptoAPI\nCryptAcquireContext\nCryptCreateHash MD5\nCryptHashData · CryptGetHashParam"]
+        FileIO["Win32 File I/O\nCreateFileA · ReadFile\nWriteFile · GetFileSizeEx"]
+        TP["Windows Thread Pool\nCreateThreadpoolWork\n4 worker threads min/max"]
+        PathAPI["Path APIs\nGetFullPathName\nPathAppend · GetCurrentDirectory"]
+    end
+
+    subgraph Storage ["Persistent Storage"]
+        DB[("users.txt\nusername:md5hash\none entry per line")]
+        UserDirs["users/\n├── UserA/\n└── UserB/\n    └── Homework"]
+    end
+
+    subgraph Tests ["SafeStorageUnitTests"]
+        UTest["SafeStorageUnitTests.cpp\nMicrosoft CppUnitTest Framework\nUserRegisterLoginLogout\nFileTransfer"]
+    end
+
+    main --> Commands
+    Commands --> Utils
+    Utils --> Crypto
+    Utils --> FileIO
+    Utils --> PathAPI
+    Commands --> FileIO
+    Commands --> TP
+    Commands --> DB
+    Commands --> UserDirs
+    UTest --> Commands
+    UTest --> Utils

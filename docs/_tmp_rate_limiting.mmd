@@ -1,0 +1,30 @@
+﻿flowchart TD
+    A(["Login attempt for username"]) --> B
+
+    B["FindOrCreateTracker username\nSearch LoginTrackers array\n— capacity: 100 entries"]
+
+    B --> C{Tracker exists\nfor this username?}
+
+    C -- No --> D{TrackerCount < 100?}
+    D -- No --> ALLOW1(["ALLOW\nArray full — fail open\nCannot track, do not block"])
+    D -- Yes --> E["Create new tracker:\nUsername = input\nAttemptCount = 1\nFirstAttemptTime = time_now"]
+    E --> ALLOW2(["ALLOW\nFirst attempt for this user"])
+
+    C -- Yes --> F["IsRateLimited:\nfetch current time via time()"]
+    F --> G{"time_now − FirstAttemptTime\n> 1 second?"}
+
+    G -- Yes --> H["Reset tracker:\nAttemptCount = 1\nFirstAttemptTime = time_now"]
+    H --> ALLOW3(["ALLOW\nTime window expired — counter reset"])
+
+    G -- No --> I{"AttemptCount >=\nMAX_ATTEMPTS_PER_SECOND\n(1 attempt per second)"}
+
+    I -- No --> J["Increment AttemptCount"]
+    J --> ALLOW4(["ALLOW\nWithin rate limit"])
+
+    I -- Yes --> DENY(["DENY\nReturn STATUS_FAIL\nToo many login attempts"])
+
+    style DENY fill:#c0392b,color:#fff
+    style ALLOW1 fill:#27ae60,color:#fff
+    style ALLOW2 fill:#27ae60,color:#fff
+    style ALLOW3 fill:#27ae60,color:#fff
+    style ALLOW4 fill:#27ae60,color:#fff

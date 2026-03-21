@@ -1,0 +1,49 @@
+﻿sequenceDiagram
+    actor User
+    participant CLI as main.c
+    participant CMD as SafeStorageHandleRegister()
+    participant VAL as ValidCredentials()
+    participant DB as usernameExists() / InsertUser()
+    participant CRYPTO as EncryptPassword()
+    participant FS as createNewUserDirectory()
+
+    User->>CLI: register username password
+    CLI->>CMD: SafeStorageHandleRegister(username, password)
+
+    CMD->>CMD: Check AppState.LoggedUser == NULL
+    alt Already logged in
+        CMD-->>CLI: STATUS_FAIL
+        CLI-->>User: Error — must be logged out to register
+    end
+
+    CMD->>VAL: ValidCredentials(username, password)
+    Note over VAL: Username: 5–10 alpha chars only<br/>Password complexity enforced:<br/>digit · uppercase · lowercase · special from !@#$%^&
+    alt Invalid format
+        VAL-->>CMD: FAIL
+        CMD-->>CLI: STATUS_FAIL
+        CLI-->>User: Error — invalid credentials format
+    end
+    VAL-->>CMD: SUCCESS
+
+    CMD->>DB: usernameExists(username)
+    alt Username already taken
+        DB-->>CMD: SUCCESS
+        CMD-->>CLI: STATUS_FAIL
+        CLI-->>User: Error — username already exists
+    end
+    DB-->>CMD: FAIL — username is available
+
+    CMD->>CRYPTO: EncryptPassword(password, hashBuffer)
+    Note over CRYPTO: CryptAcquireContext → CryptCreateHash(CALG_MD5)<br/>CryptHashData → CryptGetHashParam<br/>Converts 16-byte digest to 32-char hex string
+    CRYPTO-->>CMD: MD5 hash (32-char hex)
+
+    CMD->>DB: InsertUser(username, hash)
+    Note over DB: Opens users.txt with FILE_APPEND_DATA<br/>Writes "\nusername:hash" line
+    DB-->>CMD: SUCCESS
+
+    CMD->>FS: createNewUserDirectory(username)
+    Note over FS: Builds path: AppDir\users\username<br/>SanitizeFilePath2() validates path first<br/>CreateDirectory() creates the folder
+    FS-->>CMD: SUCCESS
+
+    CMD-->>CLI: STATUS_SUCCESS
+    CLI-->>User: Registration successful

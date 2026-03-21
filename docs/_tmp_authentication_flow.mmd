@@ -1,0 +1,61 @@
+﻿sequenceDiagram
+    actor User
+    participant CLI as main.c
+    participant CMD as SafeStorageHandleLogin()
+    participant RL as IsRateLimited()
+    participant VAL as ValidCredentials()
+    participant DB as RetrieveHash() / usernameExists()
+    participant CRYPTO as VerifyPassword()
+    participant STATE as AppState
+
+    User->>CLI: login username password
+    CLI->>CMD: SafeStorageHandleLogin(username, password)
+
+    CMD->>CMD: Check AppState.LoggedUser == NULL
+    alt Already logged in
+        CMD-->>CLI: STATUS_FAIL
+        CLI-->>User: Error — already logged in
+    end
+
+    CMD->>RL: FindOrCreateTracker(username)
+    CMD->>RL: IsRateLimited(tracker)
+    alt Rate limited — more than 1 attempt per second
+        RL-->>CMD: TRUE
+        CMD-->>CLI: STATUS_FAIL
+        CLI-->>User: Error — too many login attempts
+    end
+    RL-->>CMD: FALSE — attempt allowed
+
+    CMD->>VAL: ValidCredentials(username, password)
+    Note over VAL: Username: 5–10 alpha chars<br/>Password: 5–25 chars, requires digit +<br/>uppercase + lowercase + special (!@#$%^&)
+    alt Invalid format
+        VAL-->>CMD: FAIL
+        CMD-->>CLI: STATUS_FAIL
+        CLI-->>User: Error — invalid credentials format
+    end
+    VAL-->>CMD: SUCCESS
+
+    CMD->>DB: usernameExists(username)
+    alt Username not found in users.txt
+        DB-->>CMD: FAIL
+        CMD-->>CLI: STATUS_FAIL
+        CLI-->>User: Error — invalid username or password
+    end
+    DB-->>CMD: SUCCESS
+
+    CMD->>DB: RetrieveHash(username, storedHash)
+    DB-->>CMD: 32-char MD5 hex string
+
+    CMD->>CRYPTO: VerifyPassword(inputPassword, storedHash)
+    Note over CRYPTO: EncryptPassword(input) → compare<br/>with stored hash via strncmp
+    alt Hash mismatch
+        CRYPTO-->>CMD: FALSE
+        CMD-->>CLI: STATUS_FAIL
+        CLI-->>User: Error — invalid username or password
+    end
+    CRYPTO-->>CMD: TRUE
+
+    CMD->>STATE: LoginUser(username) — set AppState.LoggedUser<br/>build CurrentUserDirectory path
+    STATE-->>CMD: SUCCESS
+    CMD-->>CLI: STATUS_SUCCESS
+    CLI-->>User: Login successful
